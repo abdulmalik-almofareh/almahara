@@ -402,9 +402,24 @@ export function MemberEdit({ id }: { id: string }) {
   const [confirmRm, setConfirmRm] = useState(false);
 
   if (!m) return <Shell head={<div className="t"><b>العضو غير موجود</b></div>}>{null}</Shell>;
+  if (m.role === "owner")
+    return (
+      <Shell head={<div className="t"><b>{m.display_name || m.email}</b><span className="sub" dir="ltr" style={{ textAlign: "end" }}>{m.email}</span></div>}>
+        <section className="form">
+          <div className="row">
+            <div style={{ flex: 1, display: "grid", gap: 4 }}>
+              <b>مالك المدرسة</b>
+              <span className="sub">المالك يملك كل الصلاحيات ويرى كل الحلقات، ولا يمكن لأحد تعديل صلاحياته أو إزالته.</span>
+              {m.user_id === me.id && <span className="sub">لتسليم المدرسة لشخص آخر استخدم «نقل الملكية» من الإعدادات ← عام.</span>}
+            </div>
+            <span className="role-pill">المالك</span>
+          </div>
+        </section>
+      </Shell>
+    );
   const isSelf = m.user_id === me.id;
-  const canToggleAdmin = staffTarget && m.role !== "owner" && myRole === "owner" && !isSelf;
-  const canRemove = m.role !== "owner" && !isSelf && (m.role !== "admin" || myRole === "owner");
+  const canToggleAdmin = staffTarget && myRole === "owner" && !isSelf;
+  const canRemove = !isSelf && (m.role !== "admin" || myRole === "owner");
 
   async function save() {
     setBusy(true);
@@ -468,19 +483,15 @@ export function MemberEdit({ id }: { id: string }) {
               <div className="sub">سلطة الحساب</div>
               <div className="row">
                 <div style={{ flex: 1, display: "grid", gap: 4 }}>
-                  <b>{m.role === "owner" ? "مالك المدرسة" : "يمكنه إدارة المدرسة"}</b>
+                  <b>يمكنه إدارة المدرسة</b>
                   <span className="sub">المشرف يدعو الأعضاء ويزيلهم، ويدير الفصول والطلاب والوسوم، ويرى كل الحلقات.</span>
                 </div>
-                {m.role === "owner" ? (
-                  <span className="role-pill">المالك</span>
-                ) : (
-                  <label className="row" style={{ gap: 8 }}>
-                    <input type="checkbox" className="big-check" checked={admin} disabled={!canToggleAdmin} onChange={(e) => setAdmin(e.target.checked)} />
-                    <b>مشرف</b>
-                  </label>
-                )}
+                <label className="row" style={{ gap: 8 }}>
+                  <input type="checkbox" className="big-check" checked={admin} disabled={!canToggleAdmin} onChange={(e) => setAdmin(e.target.checked)} />
+                  <b>مشرف</b>
+                </label>
               </div>
-              {!canToggleAdmin && m.role !== "owner" && <span className="sub">منح صلاحية المشرف للمالك فقط.</span>}
+              {!canToggleAdmin && <span className="sub">منح صلاحية المشرف للمالك فقط.</span>}
             </section>
             <section className="form">
               <div className="sub">التدريس</div>
