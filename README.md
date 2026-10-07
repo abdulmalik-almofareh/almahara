@@ -183,4 +183,5 @@ npm run dev                  # http://localhost:3000
   - `app/api/invite/route.ts`: إرسال الدعوات.
 - **بيانات المصحف:** `public/quran.json`.
   - النص برواية حفص من حزمة [quran-json](https://github.com/risan/quran-json)، بترخيص CC BY 4.0.
-  - حدود الصفحات والأجزاء من حزمة [quran-meta](https://www.npmjs.com/package/quran-meta)، بترخيص MIT.
+  - حدود الأجزاء من حزمة [quran-meta](https://www.npmjs.com/package/quran-meta)، بترخيص MIT.
+  - عرض المصحف بخطوط مجمع الملك فهد (QCF4) وبيانات حزمة [quran-qcf4](https://www.npmjs.com/package/quran-qcf4) (البيانات MIT)، تُحمَّل من jsDelivr. الخطوط للعرض القرآني فقط، والاستخدام التجاري يحتاج إذن المجمع.
