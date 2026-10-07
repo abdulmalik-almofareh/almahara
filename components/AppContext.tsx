@@ -7,8 +7,9 @@ import type { Role } from "@/lib/roles";
 
 export type Drawer =
   | { kind: "student"; id: string; tab?: string; mk?: string; sumDate?: string }
-  | { kind: "new-asg"; id: string; date: string }
+  | { kind: "new-asg"; id: string; date: string; editId?: string }
   | { kind: "asg"; id: string }
+  | { kind: "mushaf"; id: string; page?: number; mode?: "read" | "mark" | "reflect" }
   | { kind: "student-form"; id?: string }
   | { kind: "class-form"; id?: string };
 
@@ -28,6 +29,8 @@ export type Ctx = {
   depth: number;
   toast: (msg: string) => void;
   open: (d: Drawer) => void;
+  replaceTop: (d: Drawer) => void;
+  studentUsers: { student_id: string; user_id: string }[];
   patchTop: (patch: Record<string, unknown>) => void;
   back: () => void;
   closeAll: () => void;

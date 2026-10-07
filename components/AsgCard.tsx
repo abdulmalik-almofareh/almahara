@@ -40,6 +40,7 @@ export function AsgCard({ a }: { a: Assignment }) {
             {ar(c.t)}
           </span>
         )}
+        {a.reviewed_at && <span className="cnt" title="راجع الطالب أخطاءه" style={{ color: "var(--ok)" }}>✓</span>}
         <span className={"st " + a.status}>{STATUS[a.status]}</span>
       </span>
     </button>

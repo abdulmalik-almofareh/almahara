@@ -9,6 +9,7 @@ const MESSAGES: Record<string, string> = {
   "invalid email": "البريد الإلكتروني غير صحيح.",
   "parent needs students": "اختر ابناً واحداً على الأقل لولي الأمر.",
   "student not in school": "أحد الطلاب المختارين ليس في هذه المدرسة.",
+  "student needs one student": "اختر سجل الطالب الذي سيُربط بالحساب.",
 };
 
 export async function POST(request: NextRequest) {
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
     p_school: schoolId,
     p_email: email,
     p_role: role,
-    p_student_ids: role === "parent" ? studentIds : [],
+    p_student_ids: role === "parent" || role === "student" ? studentIds : [],
   });
   if (error || !data?.[0]) {
     return NextResponse.json({ error: MESSAGES[error?.message ?? ""] || "تعذّر إنشاء الدعوة." }, { status: 400 });

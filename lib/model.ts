@@ -59,8 +59,12 @@ export type Assignment = {
   created_by: string | null;
   graded_by: string | null;
   graded_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
   created_at: string;
 };
+export type Comment = { id: string; assignment_id: string; user_id: string; body: string; created_at: string };
+export type AsgEvent = { id: string; assignment_id: string; user_id: string | null; kind: string; detail: Record<string, unknown>; created_at: string };
 
 /* a mark value is "k" (whole word) or "k|l:0,2" (those letters) or "k|h:1" (harakat only on those letters) */
 export type Mark = { k: Kind; letters: number[]; harakat: boolean };
@@ -112,6 +116,7 @@ export const addDays = (s: string, n: number) => {
 };
 export const today = () => ymd(new Date());
 export const fmtWeekday = new Intl.DateTimeFormat("ar-u-ca-gregory-nu-arab", { weekday: "long" });
+export const fmtTime = new Intl.DateTimeFormat("ar-u-ca-gregory-nu-arab", { day: "numeric", month: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 export const fmtDay = new Intl.DateTimeFormat("ar-u-ca-gregory-nu-arab", { day: "numeric", month: "long" });
 export const fmtFull = new Intl.DateTimeFormat("ar-u-ca-gregory-nu-arab", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 export const fmtHijri = (() => {

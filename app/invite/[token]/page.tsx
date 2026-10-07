@@ -77,6 +77,7 @@ export default function InvitePage() {
               </div>
               <div className="sub">{ROLE_DESC[inv.role]}</div>
               {inv.role === "parent" && inv.students.length > 0 && <div className="sub">الأبناء: <b>{inv.students.join("، ")}</b></div>}
+              {inv.role === "student" && inv.students.length > 0 && <div className="sub">سجل الطالب: <b>{inv.students[0]}</b></div>}
               <div className="sub">
                 مرسلة إلى: <b dir="ltr">{inv.email}</b>
               </div>

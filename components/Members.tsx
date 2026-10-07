@@ -6,7 +6,7 @@ import { ROLE_LABEL, type Role } from "@/lib/roles";
 import { fmtDay } from "@/lib/model";
 
 export function MembersView() {
-  const { supabase, school, me, role, members, invitations, students, guardians, toast, fail, reloadBase } = useApp();
+  const { supabase, school, me, role, members, invitations, students, guardians, studentUsers, toast, fail, reloadBase } = useApp();
   const [email, setEmail] = useState("");
   const [invRole, setInvRole] = useState<Role>("teacher");
   const [kids, setKids] = useState<string[]>([]);
@@ -59,6 +59,7 @@ export function MembersView() {
     const { error } = await supabase.from("memberships").delete().eq("school_id", school.id).eq("user_id", userId);
     if (error) return fail(error, "تعذّرت الإزالة.");
     await supabase.from("guardians").delete().eq("school_id", school.id).eq("user_id", userId);
+    await supabase.from("student_users").delete().eq("school_id", school.id).eq("user_id", userId);
     toast("أُزيل العضو");
     reloadBase();
   }
@@ -69,7 +70,7 @@ export function MembersView() {
     reloadBase();
   }
 
-  const roleOptions: Role[] = role === "owner" ? ["admin", "teacher", "parent"] : ["teacher", "parent"];
+  const roleOptions: Role[] = role === "owner" ? ["admin", "teacher", "parent", "student"] : ["teacher", "parent", "student"];
   const kidNames = (ids: string[]) => ids.map((id) => students.find((s) => s.id === id)?.name).filter(Boolean).join("، ");
 
   return (
@@ -81,11 +82,20 @@ export function MembersView() {
         <div className="form-row">
           <label className="f"><span>البريد الإلكتروني</span><input id="invEmail" type="email" dir="ltr" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" /></label>
           <label className="f"><span>الدور</span>
-            <select id="invRole" value={invRole} onChange={(e) => setInvRole(e.target.value as Role)}>
+            <select id="invRole" value={invRole} onChange={(e) => { setInvRole(e.target.value as Role); setKids([]); }}>
               {roleOptions.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
             </select>
           </label>
         </div>
+        {invRole === "student" && (
+          <label className="f">
+            <span>سجل الطالب الذي سيُربط بهذا الحساب</span>
+            <select id="invStudent" value={kids[0] ?? ""} onChange={(e) => setKids(e.target.value ? [e.target.value] : [])}>
+              <option value="">اختر الطالب…</option>
+              {students.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
+        )}
         {invRole === "parent" && (
           <div style={{ display: "grid", gap: 4 }}>
             <span className="sub">أبناؤه (يرى ولي الأمر هؤلاء فقط)</span>
@@ -101,7 +111,7 @@ export function MembersView() {
           </div>
         )}
         <div className="row">
-          <button className="btn primary" disabled={busy || (invRole === "parent" && !kids.length)}>{busy ? "جارٍ الإرسال…" : "إرسال الدعوة"}</button>
+          <button className="btn primary" disabled={busy || ((invRole === "parent" || invRole === "student") && !kids.length)}>{busy ? "جارٍ الإرسال…" : "إرسال الدعوة"}</button>
           {error && <span className="err">{error}</span>}
         </div>
         {result && (
@@ -127,7 +137,7 @@ export function MembersView() {
                 {invitations.map((i) => (
                   <tr key={i.id}>
                     <td dir="ltr" style={{ textAlign: "end" }}>{i.email}</td>
-                    <td>{ROLE_LABEL[i.role]}{i.role === "parent" && i.student_ids.length > 0 && <div className="sub">{kidNames(i.student_ids)}</div>}</td>
+                    <td>{ROLE_LABEL[i.role]}{i.student_ids.length > 0 && <div className="sub">{kidNames(i.student_ids)}</div>}</td>
                     <td className="muted">{fmtDay.format(new Date(i.created_at))}</td>
                     <td>
                       <div className="row">
@@ -147,11 +157,11 @@ export function MembersView() {
         <div className="panel-h"><h2>الأعضاء</h2><span className="sub">{members.length}</span></div>
         <div className="tbl-wrap">
           <table className="tbl">
-            <thead><tr><th>العضو</th><th>الدور</th><th>الأبناء</th><th></th></tr></thead>
+            <thead><tr><th>العضو</th><th>الدور</th><th>الطالب المرتبط</th><th></th></tr></thead>
             <tbody>
               {members.map((m) => {
                 const locked = m.role === "owner" || m.user_id === me.id || (m.role === "admin" && role !== "owner");
-                const kidsOf = guardians.filter((g) => g.user_id === m.user_id).map((g) => g.student_id);
+                const kidsOf = [...guardians, ...studentUsers].filter((g) => g.user_id === m.user_id).map((g) => g.student_id);
                 return (
                   <tr key={m.user_id}>
                     <td>

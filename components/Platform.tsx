@@ -9,15 +9,18 @@ import {
   addDays, fmtDay, fmtFull, fmtHijri, fmtWeekday, parseYmd, today, TYPES,
   type Assignment, type ClassRow, type Guardian, type Invitation, type Me, type Member, type School, type Student,
 } from "@/lib/model";
-import { isManager, isStaff, ROLE_LABEL } from "@/lib/roles";
+import { isManager, isStaff, isStudent, ROLE_LABEL } from "@/lib/roles";
 import { AppContext, useApp as useApp2, type Ctx, type Drawer } from "./AppContext";
 import { Shell } from "./Shell";
 import { AsgCard, TypeBadge } from "./AsgCard";
-import { IconLeft, IconRight } from "./icons";
+import { IconLeft, IconLeft2, IconRight, IconRight2 } from "./icons";
+import { Sidebar } from "./Sidebar";
 import { Brand } from "./Brand";
 import { MembersView } from "./Members";
 import { StudentDrawer, StudentForm } from "./StudentDrawer";
-import { NewAssignment, Grading } from "./Assignment";
+import { NewAssignment } from "./Assignment";
+import { AssignmentModal } from "./AssignmentModal";
+import { MushafView } from "./Mushaf";
 
 type View = "board" | "students" | "classes" | "members" | "settings" | "kids";
 
@@ -30,11 +33,13 @@ export default function Platform({ school, schools, me }: { school: School; scho
 
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<View>(staff ? "board" : "kids");
+  void isStudent;
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [studentUsers, setStudentUsers] = useState<{ student_id: string; user_id: string }[]>([]);
   const [asg, setAsg] = useState<Record<string, Assignment>>({});
   const [drawers, setDrawers] = useState<Drawer[]>([]);
   const [toastMsg, setToastMsg] = useState("");
@@ -52,7 +57,7 @@ export default function Platform({ school, schools, me }: { school: School; scho
 
   const reloadBase = useCallback(async () => {
     const sid = school.id;
-    const [c, s, m, g, i] = await Promise.all([
+    const [c, s, m, g, i, su] = await Promise.all([
       supabase.from("classes").select("*").eq("school_id", sid).order("name"),
       supabase.from("students").select("*").eq("school_id", sid).order("name"),
       supabase.from("memberships").select("*").eq("school_id", sid).order("created_at"),
@@ -60,12 +65,14 @@ export default function Platform({ school, schools, me }: { school: School; scho
       manager
         ? supabase.from("invitations").select("*").eq("school_id", sid).eq("status", "pending").order("created_at", { ascending: false })
         : Promise.resolve({ data: [] as Invitation[] }),
+      staff ? supabase.from("student_users").select("student_id, user_id").eq("school_id", sid) : Promise.resolve({ data: [] }),
     ]);
     setClasses((c.data as ClassRow[]) ?? []);
     setStudents((s.data as Student[]) ?? []);
     setMembers((m.data as Member[]) ?? []);
     setGuardians((g.data as Guardian[]) ?? []);
     setInvitations((i.data as Invitation[]) ?? []);
+    setStudentUsers((su.data as { student_id: string; user_id: string }[]) ?? []);
   }, [supabase, school.id, staff, manager]);
 
   const mergeAsg = useCallback((rows: Assignment[]) => {
@@ -115,6 +122,8 @@ export default function Platform({ school, schools, me }: { school: School; scho
     supabase, school, me, role, staff, manager, classes, students, members, guardians, invitations, asg, depth: drawers.length,
     toast, fail, reloadBase, loadStudentAsg, upsertAsg, dropAsg,
     open: (d) => setDrawers((s) => [...s, d]),
+    replaceTop: (d) => setDrawers((s) => [...s.slice(0, -1), d]),
+    studentUsers,
     patchTop: (patch) => setDrawers((s) => (s.length ? [...s.slice(0, -1), { ...s[s.length - 1], ...patch } as Drawer] : s)),
     back: () => setDrawers((s) => s.slice(0, -1)),
     closeAll: () => setDrawers([]),
@@ -131,66 +140,28 @@ export default function Platform({ school, schools, me }: { school: School; scho
     return () => window.removeEventListener("keydown", onKey);
   }, [drawers.length]);
 
-  const nav: [View, string][] = staff
-    ? [["board", "لوحة المعلم"], ["students", "الطلاب"], ["classes", "الفصول"], ...(manager ? ([["members", "الأعضاء والدعوات"]] as [View, string][]) : []), ["settings", "الإعدادات"]]
-    : [["kids", "أبنائي"], ["settings", "الإعدادات"]];
-
-  const now = new Date();
   return (
     <AppContext.Provider value={ctx}>
-      <header className="top">
-        <div className="top-in">
-          <Brand />
-          <nav className="nav">
-            {nav.map(([v, l]) => (
-              <button key={v} aria-current={view === v} onClick={() => { setView(v); window.scrollTo(0, 0); }}>
-                {l}
-              </button>
-            ))}
-          </nav>
-          <div className="date">
-            {fmtFull.format(now)}
-            {fmtHijri && (
-              <>
-                <br />
-                {fmtHijri.format(now)}
-              </>
-            )}
-          </div>
-          <div className="userchip">
-            {schools.length > 1 ? (
-              <select aria-label="المدرسة" value={school.id} onChange={(e) => router.push("/?school=" + e.target.value)}>
-                {schools.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            ) : (
-              <span>{school.name}</span>
-            )}
-            <span className="role-pill">{ROLE_LABEL[role]}</span>
-            <form action="/auth/signout" method="post">
-              <button className="btn ghost sm">خروج</button>
-            </form>
-          </div>
-        </div>
-      </header>
-      <main>
-        {!ready ? (
-          <div className="empty"><p>جارٍ تحميل المنصة…</p></div>
-        ) : view === "board" ? (
-          <Board mergeAsg={mergeAsg} />
-        ) : view === "students" ? (
-          <StudentsView />
-        ) : view === "classes" ? (
-          <ClassesView />
-        ) : view === "members" ? (
-          <MembersView />
-        ) : view === "kids" ? (
-          <KidsView />
-        ) : (
-          <SettingsView />
-        )}
-      </main>
+      <div className="app">
+        <Sidebar view={view} setView={(v) => { setView(v as View); window.scrollTo(0, 0); }} schools={schools} onSwitch={(id) => router.push("/?school=" + id)} />
+        <main className="main">
+          {!ready ? (
+            <div className="empty"><p>جارٍ تحميل المنصة…</p></div>
+          ) : view === "board" ? (
+            <Board mergeAsg={mergeAsg} />
+          ) : view === "students" ? (
+            <StudentsView />
+          ) : view === "classes" ? (
+            <ClassesView />
+          ) : view === "members" ? (
+            <MembersView />
+          ) : view === "kids" ? (
+            <KidsView />
+          ) : (
+            <SettingsView />
+          )}
+        </main>
+      </div>
       {ready && <DrawerHost drawers={drawers} />}
       {toastMsg && <div className="toast">{toastMsg}</div>}
     </AppContext.Provider>
@@ -202,17 +173,18 @@ function DrawerHost({ drawers }: { drawers: Drawer[] }) {
   const { closeAll } = useApp2();
   const d = drawers[drawers.length - 1];
   if (!d) return null;
-  const depth = drawers.length;
+  if (d.kind === "mushaf") return <MushafView key={"m" + d.id} d={d} />;
   let body: React.ReactNode = null;
   if (d.kind === "student") body = <StudentDrawer key={"s" + d.id} d={d} />;
-  else if (d.kind === "new-asg") body = <NewAssignment key={"n" + d.id + d.date} d={d} />;
-  else if (d.kind === "asg") body = <Grading key={"a" + d.id} id={d.id} />;
+  else if (d.kind === "new-asg") body = <NewAssignment key={"n" + d.id + d.date + (d.editId ?? "")} d={d} />;
+  else if (d.kind === "asg") body = <AssignmentModal key={"a" + d.id} id={d.id} />;
   else if (d.kind === "student-form") body = <StudentForm key={"f" + (d.id ?? "")} id={d.id} />;
   else if (d.kind === "class-form") body = <ClassForm key={"c" + d.id} id={d.id} />;
+  const wide = d.kind === "asg" || d.kind === "student";
   return (
     <>
       <div className="scrim" onClick={closeAll} />
-      <aside className="drawer" role="dialog" aria-modal="true" data-depth={depth}>
+      <aside className={"drawer" + (wide ? " wide" : "")} role="dialog" aria-modal="true">
         {body}
       </aside>
     </>
@@ -223,10 +195,14 @@ function DrawerHost({ drawers }: { drawers: Drawer[] }) {
 function Board({ mergeAsg }: { mergeAsg: (rows: Assignment[]) => void }) {
   const { supabase, school, students, classes, asg, open, manager, className, fail } = useApp2();
   const [classId, setClassId] = useState("all");
-  const [span, setSpan] = useState(typeof window !== "undefined" && window.innerWidth < 640 ? 1 : 7);
+  const [span, setSpan] = useState(7);
   const [anchor, setAnchor] = useState(today());
   const [search, setSearch] = useState("");
   const td = today();
+
+  useEffect(() => {
+    if (window.innerWidth < 640) setSpan(1);
+  }, []);
 
   const days = useMemo(() => {
     let start: string;
@@ -246,87 +222,89 @@ function Board({ mergeAsg }: { mergeAsg: (rows: Assignment[]) => void }) {
       .then(({ data, error }) => (error ? fail(error, "تعذّر تحميل الواجبات.") : mergeAsg((data as Assignment[]) ?? [])));
   }, [supabase, school.id, days, mergeAsg, fail]);
 
-  if (!classes.length)
-    return (
-      <div className="empty">
-        <h2>أهلاً بك في المهرة</h2>
-        <p>{manager ? "ابدأ بإنشاء أول فصل من صفحة الفصول، ثم أضف الطلاب." : "لم يُنشئ المشرف أي فصل بعد."}</p>
-      </div>
-    );
-
   let list = students.filter((s) => s.active);
   if (classId !== "all") list = list.filter((s) => s.class_id === classId);
   if (search) list = list.filter((s) => s.name.includes(search));
   const by: Record<string, Assignment[]> = {};
   for (const a of Object.values(asg)) (by[a.student_id + "|" + a.date] ||= []).push(a);
 
-  const rangeTitle = days.length === 1 ? fmtFull.format(parseYmd(days[0])) : fmtDay.format(parseYmd(days[0])) + " – " + fmtDay.format(parseYmd(days[days.length - 1]));
+  const first = parseYmd(days[0]), last = parseYmd(days[days.length - 1]);
+  const rangeTitle = days.length === 1 ? fmtFull.format(first) : fmtDay.format(first) + " – " + fmtDay.format(last);
 
   return (
-    <>
-      <div className="tabs" role="tablist">
-        <button role="tab" aria-selected={classId === "all"} onClick={() => setClassId("all")}>كل الطلاب</button>
-        {classes.map((c) => (
-          <button key={c.id} role="tab" aria-selected={classId === c.id} onClick={() => setClassId(c.id)}>{c.name}</button>
-        ))}
+    <div className="board">
+      <div className="board-top">
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={classId === "all"} onClick={() => setClassId("all")}>الكل</button>
+          {classes.map((c) => (
+            <button key={c.id} role="tab" aria-selected={classId === c.id} onClick={() => setClassId(c.id)}>{c.name}</button>
+          ))}
+        </div>
+        <span className="spacer" />
+        {manager && <button className="btn ghost" onClick={() => open({ kind: "student-form" })}>+ تسجيل طالب</button>}
       </div>
       <div className="toolbar">
-        <div className="row">
-          <button className="icon-btn" aria-label="السابق" onClick={() => setAnchor(addDays(anchor, -span))}><IconRight /></button>
-          <button className="btn sm" onClick={() => setAnchor(today())}>اليوم</button>
-          <button className="icon-btn" aria-label="التالي" onClick={() => setAnchor(addDays(anchor, span))}><IconLeft /></button>
+        <button className="btn sm" onClick={() => setAnchor(today())}>اليوم</button>
+        <div className="row" style={{ gap: 2 }}>
+          <button className="icon-btn" title={span === 1 ? "اليوم السابق" : "الفترة السابقة"} aria-label="الفترة السابقة" onClick={() => setAnchor(addDays(anchor, -span))}><IconRight2 /></button>
+          <button className="icon-btn" title="يوم للخلف" aria-label="يوم للخلف" onClick={() => setAnchor(addDays(anchor, -1))}><IconRight /></button>
+          <button className="icon-btn" title="يوم للأمام" aria-label="يوم للأمام" onClick={() => setAnchor(addDays(anchor, 1))}><IconLeft /></button>
+          <button className="icon-btn" title="الفترة التالية" aria-label="الفترة التالية" onClick={() => setAnchor(addDays(anchor, span))}><IconLeft2 /></button>
         </div>
         <span className="range-title">{rangeTitle}</span>
         <span className="spacer" />
-        <input type="search" id="search" placeholder="ابحث عن طالب…" value={search} onChange={(e) => setSearch(e.target.value.trim())} aria-label="بحث" style={{ width: 170 }} />
+        <span className="sub">{ar(list.length)} طلاب</span>
+        <input type="search" id="search" placeholder="ابحث عن الطلاب…" value={search} onChange={(e) => setSearch(e.target.value.trim())} aria-label="بحث" style={{ width: 200 }} />
         <div className="seg" role="group" aria-label="عدد الأيام">
           {[1, 3, 5, 7].map((n) => (
-            <button key={n} aria-pressed={span === n} onClick={() => setSpan(n)}>{n === 1 ? "يوم" : ar(n) + " أيام"}</button>
+            <button key={n} aria-pressed={span === n} onClick={() => setSpan(n)}>{n === 1 ? "يوم واحد" : ar(n) + " أيام"}</button>
           ))}
         </div>
-        {manager && <button className="btn primary" onClick={() => open({ kind: "student-form" })}>+ طالب</button>}
       </div>
-      {!list.length ? (
-        <div className="empty">
-          <p>{search ? "لا يوجد طالب بهذا الاسم." : "لا يوجد طلاب في هذا الفصل بعد."}</p>
-          {manager && !search && <button className="btn primary" onClick={() => open({ kind: "student-form" })}>إضافة طالب</button>}
-        </div>
-      ) : (
-        <div className="grid-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th className="stu">الطالب <span className="sub">({ar(list.length)})</span></th>
+      <div className="grid-wrap">
+        <table className="grid" style={{ ["--days" as string]: span }}>
+          <thead>
+            <tr>
+              <th className="stu">الطالب</th>
+              {days.map((d) => (
+                <th key={d} className={d === td ? "today" : ""}>
+                  {d === td ? "اليوم" : fmtWeekday.format(parseYmd(d))}
+                  <b className="num">{ar(parseYmd(d).getDate())}</b>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((s) => (
+              <tr key={s.id}>
+                <th className="stu">
+                  <button className="stu-btn" onClick={() => open({ kind: "student", id: s.id, tab: "tasks" })}>{s.name}</button>
+                  {classId === "all" && <div className="sub">{className(s.class_id)}</div>}
+                </th>
                 {days.map((d) => (
-                  <th key={d} className={d === td ? "today" : ""}>
-                    {d === td ? "اليوم" : fmtWeekday.format(parseYmd(d))}
-                    <b className="num">{ar(parseYmd(d).getDate())}</b>
-                  </th>
+                  <td key={d} className={d === td ? "today" : ""}>
+                    <div className="cell">
+                      {(by[s.id + "|" + d] || []).sort((x, y) => x.created_at.localeCompare(y.created_at)).map((a) => <AsgCard key={a.id} a={a} />)}
+                      <button className="add" aria-label={"أضف واجبًا لـ " + s.name} onClick={() => open({ kind: "new-asg", id: s.id, date: d })}>+</button>
+                    </div>
+                  </td>
                 ))}
               </tr>
-            </thead>
-            <tbody>
-              {list.map((s) => (
-                <tr key={s.id}>
-                  <th className="stu">
-                    <button className="stu-btn" onClick={() => open({ kind: "student", id: s.id, tab: "tasks" })}>{s.name}</button>
-                    {classId === "all" && <div className="sub">{className(s.class_id)}</div>}
-                  </th>
-                  {days.map((d) => (
-                    <td key={d} className={d === td ? "today" : ""}>
-                      <div className="cell">
-                        {(by[s.id + "|" + d] || []).sort((x, y) => x.created_at.localeCompare(y.created_at)).map((a) => <AsgCard key={a.id} a={a} />)}
-                        <button className="add" aria-label={"أضف واجبًا لـ " + s.name} onClick={() => open({ kind: "new-asg", id: s.id, date: d })}>+</button>
-                      </div>
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <div className="row sub" style={{ marginTop: 10 }}>
+            ))}
+            {!list.length && (
+              <tr>
+                <td colSpan={span + 1} className="grid-empty">
+                  {!classes.length
+                    ? manager ? "ابدأ بإنشاء أول فصل من صفحة الفصول، ثم أضف الطلاب." : "لم يُنشئ المشرف أي فصل بعد."
+                    : search ? "لا يوجد طالب بهذا الاسم." : "لا يوجد طلاب في هذا الفصل بعد."}
+                  {manager && classes.length > 0 && !search && <div style={{ marginTop: 10 }}><button className="btn primary" onClick={() => open({ kind: "student-form" })}>إضافة طالب</button></div>}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="row sub legend">
         {Object.entries(TYPES).map(([k, v]) => (
           <span key={k} className="row" style={{ gap: 4 }}><TypeBadge type={k} />{v}</span>
         ))}
@@ -334,8 +312,9 @@ function Board({ mergeAsg }: { mergeAsg: (rows: Assignment[]) => void }) {
         <span className="cnt"><i style={{ background: "var(--m)" }} />أخطاء</span>
         <span className="cnt"><i style={{ background: "var(--h)" }} />ترددات</span>
         <span className="cnt"><i style={{ background: "var(--t)" }} />تجويد</span>
+        <span className="cnt"><span style={{ color: "var(--ok)" }}>✓</span> راجع الطالب أخطاءه</span>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -486,11 +465,12 @@ function ClassForm({ id }: { id?: string }) {
 
 /* ---------------- parent home ---------------- */
 function KidsView() {
-  const { students, open, className } = useApp2();
+  const { students, open, className, role } = useApp2();
   const kids = students.filter((s) => s.active);
+  if (role === "student" && kids.length === 1) return <StudentHome id={kids[0].id} />;
   return (
     <>
-      <h1 style={{ marginBottom: 14 }}>أبنائي</h1>
+      <h1 style={{ marginBottom: 14 }}>{role === "student" ? "واجباتي" : "أبنائي"}</h1>
       {kids.length ? (
         <div className="kids">
           {kids.map((k) => (
@@ -502,7 +482,7 @@ function KidsView() {
           ))}
         </div>
       ) : (
-        <div className="empty"><p>لم يُربط أي طالب بحسابك بعد. اطلب من المشرف إرسال دعوة ولي أمر لأبنائك.</p></div>
+        <div className="empty"><p>{role === "student" ? "لم يُربط حسابك بسجل طالب بعد. اطلب من معلمك إرسال دعوة طالب." : "لم يُربط أي طالب بحسابك بعد. اطلب من المشرف إرسال دعوة ولي أمر لأبنائك."}</p></div>
       )}
     </>
   );
@@ -540,6 +520,7 @@ function SettingsView() {
               <tr><td><b>مشرف</b></td><td>إدارة الفصول والطلاب، ودعوة المعلمين وأولياء الأمور، والتسميع</td></tr>
               <tr><td><b>معلم</b></td><td>إضافة الواجبات والتسميع وتسجيل الأخطاء لكل طلاب المدرسة</td></tr>
               <tr><td><b>ولي أمر</b></td><td>متابعة أبنائه فقط، دون تعديل</td></tr>
+              <tr><td><b>طالب</b></td><td>يرى واجباته وأخطاءه، ويعلّق على الواجب، ويؤكد أنه راجع أخطاءه</td></tr>
             </tbody>
           </table>
         </div>
@@ -548,6 +529,29 @@ function SettingsView() {
         <h2>المصحف</h2>
         <p style={{ margin: 0 }}>النص برواية حفص عن عاصم، وتقسيم الصفحات والأجزاء على مصحف المدينة (٦٠٤ صفحات).</p>
       </div>
+    </div>
+  );
+}
+
+/* ---------------- student home ---------------- */
+function StudentHome({ id }: { id: string }) {
+  const { asg, loadStudentAsg, open } = useApp2();
+  useEffect(() => {
+    loadStudentAsg(id);
+  }, [id, loadStudentAsg]);
+  const list = Object.values(asg).filter((a) => a.student_id === id).sort((x, y) => (y.date + y.created_at).localeCompare(x.date + x.created_at));
+  const pending = list.filter((a) => a.status !== "pending" && !a.reviewed_at && Object.keys(a.marks || {}).length > 0);
+  return (
+    <div style={{ display: "grid", gap: 16, maxWidth: 820 }}>
+      <h1>واجباتي</h1>
+      {pending.length > 0 && (
+        <div className="panel" style={{ padding: 14, display: "grid", gap: 8 }}>
+          <h3>أخطاء تنتظر مراجعتك ({ar(pending.length)})</h3>
+          <div className="hist">{pending.map((a) => <AsgCard key={a.id} a={a} />)}</div>
+        </div>
+      )}
+      <div className="row"><button className="btn" onClick={() => open({ kind: "student", id, tab: "progress" })}>تقدمي وأخطائي</button></div>
+      {list.length ? <div className="hist">{list.map((a) => <AsgCard key={a.id} a={a} />)}</div> : <div className="empty"><p>لا توجد واجبات بعد.</p></div>}
     </div>
   );
 }
