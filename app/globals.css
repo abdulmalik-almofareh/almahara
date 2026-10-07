@@ -362,3 +362,12 @@ table.tbl{border-collapse:collapse;width:100%}
 .mf-opt{display:grid;gap:6px}
 .pop{z-index:60}
 @media (max-width:700px){.mf-arrow{display:none}.mf-stage{padding:6px}.mf-page{padding:10px}}
+
+/* v2.1: fixed board columns (student column fixed, days share the rest) */
+table.grid{table-layout:fixed;width:100%;min-width:calc(180px + var(--days,7) * 130px)}
+.grid th.stu{width:180px;min-width:0}
+.grid td,.grid thead th:not(.stu){width:auto;min-width:0}
+
+/* v2.1: center windows reliably in RTL (no transform, no logical-inset conflict) */
+.drawer{left:0;right:0;inset-inline:0;margin-inline:auto;transform:none}
+@media (max-width:700px){.drawer,.drawer.wide{top:0;bottom:0;width:100vw;margin:0}}
