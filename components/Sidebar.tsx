@@ -9,7 +9,7 @@ import { IconBook, IconHome, IconLogout, IconMenu, IconSchool, IconSettings, Ico
 type Item = { v: string; label: string; icon: React.ReactNode };
 
 export function Sidebar({ view, setView, schools, onSwitch }: { view: string; setView: (v: string) => void; schools: School[]; onSwitch: (id: string) => void }) {
-  const { school, role, staff, manager, me } = useApp();
+  const { school, role, staff, manager, me, schoolRow } = useApp();
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -35,12 +35,12 @@ export function Sidebar({ view, setView, schools, onSwitch }: { view: string; se
     ? [
         { v: "students", label: "الطلاب", icon: <IconUsers /> },
         { v: "classes", label: "الفصول", icon: <IconSchool /> },
-        ...(manager ? [{ v: "members", label: "الأعضاء والدعوات", icon: <IconTeam /> }] : []),
+        ...(manager ? [{ v: "members", label: "الأعضاء", icon: <IconTeam /> }] : []),
       ]
     : [];
 
   const Btn = ({ it }: { it: Item }) => (
-    <button className="side-item" aria-current={view === it.v} onClick={() => setView(it.v)} title={collapsed ? it.label : undefined}>
+    <button className="side-item" aria-current={view === it.v || (it.v === "settings" && view.startsWith("s-"))} onClick={() => setView(it.v)} title={collapsed ? it.label : undefined}>
       {it.icon}
       <span className="side-label">{it.label}</span>
     </button>
@@ -49,14 +49,14 @@ export function Sidebar({ view, setView, schools, onSwitch }: { view: string; se
   return (
     <aside className={"side" + (collapsed ? " collapsed" : "")}>
       <div className="side-head">
-        <span className="side-logo"><IconBook size={22} /></span>
+        <span className="side-logo">{schoolRow?.logo_url ? <img src={schoolRow.logo_url} alt="" /> : <IconBook size={22} />}</span>
         <div className="side-school">
           {schools.length > 1 ? (
             <select aria-label="المدرسة" value={school.id} onChange={(e) => onSwitch(e.target.value)}>
               {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           ) : (
-            <b>{school.name}</b>
+            <b>{schoolRow?.name ?? school.name}</b>
           )}
           <span className="sub">المهرة</span>
         </div>

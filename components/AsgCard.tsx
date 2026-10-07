@@ -13,7 +13,8 @@ export function TypeBadge({ type }: { type: string }) {
 }
 
 export function AsgCard({ a }: { a: Assignment }) {
-  const { open } = useApp();
+  const { open, tags } = useApp();
+  const tagNames = (a.tag_ids || []).map((t) => tags.find((x) => x.id === t)?.name).filter(Boolean);
   const c = countMarks(a);
   return (
     <button className="card" style={{ ["--tc" as string]: `var(--${a.type})` }} onClick={() => open({ kind: "asg", id: a.id })} title={TYPES[a.type]}>
@@ -43,6 +44,7 @@ export function AsgCard({ a }: { a: Assignment }) {
         {a.reviewed_at && <span className="cnt" title="راجع الطالب أخطاءه" style={{ color: "var(--ok)" }}>✓</span>}
         <span className={"st " + a.status}>{STATUS[a.status]}</span>
       </span>
+      {tagNames.length > 0 && <span className="card-tags">{tagNames.map((n) => "#" + n).join(" ")}</span>}
     </button>
   );
 }

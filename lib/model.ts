@@ -27,8 +27,12 @@ export type Student = {
   guardian_phone: string | null;
   notes: string | null;
   active: boolean;
+  allowed_types: AsgType[];
   created_at: string;
 };
+export type Tag = { id: string; school_id: string; name: string; keep_on_due_date: boolean; created_at: string };
+export type ClassTeacher = { class_id: string; user_id: string; school_id: string };
+export type SchoolRow = { id: string; name: string; timezone: string; logo_url: string | null; created_at: string };
 export type Member = { school_id: string; user_id: string; role: Role; display_name: string | null; email: string | null; created_at: string };
 export type Guardian = { student_id: string; user_id: string; school_id: string };
 export type Invitation = {
@@ -37,6 +41,7 @@ export type Invitation = {
   email: string;
   role: Role;
   student_ids: string[];
+  class_ids: string[];
   token: string;
   status: "pending" | "accepted" | "revoked";
   created_at: string;
@@ -59,6 +64,7 @@ export type Assignment = {
   created_by: string | null;
   graded_by: string | null;
   graded_at: string | null;
+  tag_ids: string[];
   reviewed_at: string | null;
   reviewed_by: string | null;
   created_at: string;

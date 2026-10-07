@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Assignment, ClassRow, Guardian, Invitation, Me, Member, School, Student } from "@/lib/model";
+import type { Assignment, ClassRow, ClassTeacher, Guardian, Invitation, Me, Member, School, SchoolRow, Student, Tag } from "@/lib/model";
 import type { Role } from "@/lib/roles";
 
 export type Drawer =
@@ -11,7 +11,8 @@ export type Drawer =
   | { kind: "asg"; id: string }
   | { kind: "mushaf"; id: string; page?: number; mode?: "read" | "mark" | "reflect" }
   | { kind: "student-form"; id?: string }
-  | { kind: "class-form"; id?: string };
+  | { kind: "class-form"; id?: string }
+  | { kind: "member"; id: string };
 
 export type Ctx = {
   supabase: SupabaseClient;
@@ -27,6 +28,11 @@ export type Ctx = {
   invitations: Invitation[];
   asg: Record<string, Assignment>;
   depth: number;
+  classTeachers: ClassTeacher[];
+  tags: Tag[];
+  schoolRow: SchoolRow | null;
+  myClassIds: string[];
+  go: (view: string) => void;
   toast: (msg: string) => void;
   open: (d: Drawer) => void;
   replaceTop: (d: Drawer) => void;

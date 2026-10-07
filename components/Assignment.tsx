@@ -69,7 +69,8 @@ export function NewAssignment({ d }: { d: NewD }) {
   const s = students.find((x) => x.id === d.id);
   const editing = d.editId ? asg[d.editId] : undefined;
   const [f, setF] = useState<Form>(() => {
-    const base: Form = { type: "NL", mode: "page", date: d.date, p1: 1, p2: 1, s1: 1, a1: 1, s2: 1, a2: 7, j1: 30, j2: 30, qh: "", note: "" };
+    const allowed = (s?.allowed_types?.length ? s.allowed_types : (Object.keys(TYPES) as AsgType[]));
+    const base: Form = { type: allowed[0], mode: "page", date: d.date, p1: 1, p2: 1, s1: 1, a1: 1, s2: 1, a2: 7, j1: 30, j2: 30, qh: "", note: "" };
     if (!editing) return base;
     const e: Form = { ...base, type: editing.type, date: editing.date, note: editing.note || "", qh: editing.type === "QH" ? editing.label : "" };
     if (editing.from_ayah && editing.to_ayah) {
@@ -88,7 +89,7 @@ export function NewAssignment({ d }: { d: NewD }) {
     () => Object.values(asg).filter((a) => a.student_id === d.id).sort((x, y) => (y.date + y.created_at).localeCompare(x.date + x.created_at)),
     [asg, d.id],
   );
-  const sugg = useMemo(() => suggestions(history), [history]);
+  const sugg = useMemo(() => suggestions(history).filter((x) => !s?.allowed_types?.length || s.allowed_types.includes(x.type)), [history, s?.allowed_types]);
   const set = (patch: Partial<Form>) => setF((p) => ({ ...p, ...patch }));
   const num = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => set({ [k]: Number(e.target.value) } as Partial<Form>);
 
@@ -142,7 +143,7 @@ export function NewAssignment({ d }: { d: NewD }) {
         <div style={{ display: "grid", gap: 6 }}>
           <span className="sub">نوع الواجب</span>
           <div className="chips">
-            {(Object.entries(TYPES) as [AsgType, string][]).map(([k, t]) => (
+            {(Object.entries(TYPES) as [AsgType, string][]).filter(([k]) => !s?.allowed_types?.length || s.allowed_types.includes(k) || editing?.type === k).map(([k, t]) => (
               <button type="button" key={k} className="chip" style={{ ["--tc" as string]: `var(--${k})` }} aria-pressed={f.type === k} onClick={() => set({ type: k })}>{t}</button>
             ))}
           </div>

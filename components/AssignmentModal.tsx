@@ -24,7 +24,9 @@ const relDay = (d: string) => {
 };
 
 export function AssignmentModal({ id }: { id: string }) {
-  const { supabase, asg, students, staff, role, me, upsertAsg, dropAsg, back, open, replaceTop, toast, fail, memberName, loadStudentAsg, className } = useApp();
+  const { supabase, asg, students, staff, role, me, upsertAsg, dropAsg, back, open, replaceTop, toast, fail, memberName, loadStudentAsg, className, tags, school, reloadBase } = useApp();
+  const [tagMenu, setTagMenu] = useState(false);
+  const [newTag, setNewTag] = useState("");
   const a = asg[id];
   const s = a ? students.find((x) => x.id === a.student_id) : undefined;
   const [menu, setMenu] = useState(false);
@@ -92,7 +94,41 @@ export function AssignmentModal({ id }: { id: string }) {
   function onNote(v: string) {
     setNote(v);
     if (noteT.current) clearTimeout(noteT.current);
-    noteT.current = setTimeout(() => update({ note: v }), 900);
+    noteT.current = setTimeout(async () => {
+      // #وسم inside the note adds that tag (created if missing)
+      const found = [...new Set((v.match(/#[^\s#.,،؛!?؟]+/gu) || []).map((t) => t.slice(1)))];
+      let ids = [...(a.tag_ids || [])];
+      if (found.length) {
+        for (const n of found) {
+          let t = tags.find((x) => x.name.toLowerCase() === n.toLowerCase());
+          if (!t) {
+            const r = await supabase.from("tags").insert({ school_id: school.id, name: n }).select().single();
+            if (!r.error) t = r.data as typeof tags[number];
+          }
+          if (t && !ids.includes(t.id)) ids.push(t.id);
+        }
+        if (ids.length !== (a.tag_ids || []).length) reloadBase();
+      }
+      update({ note: v, tag_ids: ids });
+    }, 900);
+  }
+  async function toggleTag(id: string) {
+    const cur = a.tag_ids || [];
+    update({ tag_ids: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+  }
+  async function createTag(e: React.FormEvent) {
+    e.preventDefault();
+    const n = newTag.trim().replace(/^#/, "").replace(/\s+/g, "_");
+    if (!n) return;
+    let t = tags.find((x) => x.name.toLowerCase() === n.toLowerCase());
+    if (!t) {
+      const r = await supabase.from("tags").insert({ school_id: school.id, name: n }).select().single();
+      if (r.error) return fail(r.error, "تعذّر إنشاء الوسم.");
+      t = r.data as typeof tags[number];
+      reloadBase();
+    }
+    setNewTag("");
+    if (!(a.tag_ids || []).includes(t.id)) update({ tag_ids: [...(a.tag_ids || []), t.id] });
   }
   async function setReviewed(v: boolean) {
     const { error } = await supabase.rpc("set_reviewed", { p_assignment: a.id, p_value: v });
@@ -177,6 +213,33 @@ export function AssignmentModal({ id }: { id: string }) {
           <section className="am-sec">
             <div className="row">
               <span className="type-pill" style={{ ["--tc" as string]: `var(--${a.type})` }}>{TYPES[a.type]}</span>
+              {(a.tag_ids || []).map((tid) => {
+                const t = tags.find((x) => x.id === tid);
+                return t ? <span key={tid} className="tag-chip">#{t.name}</span> : null;
+              })}
+              {staff && (
+                <div className="menu-wrap">
+                  <button className="btn sm ghost" onClick={() => setTagMenu(!tagMenu)} aria-expanded={tagMenu}>+ وسم</button>
+                  {tagMenu && (
+                    <>
+                      <div className="menu-scrim" onClick={() => setTagMenu(false)} />
+                      <div className="menu" role="menu" style={{ insetInlineEnd: "auto", insetInlineStart: 0, minWidth: 240 }}>
+                        {tags.map((t) => (
+                          <label key={t.id} className="menu-check">
+                            <input type="checkbox" checked={(a.tag_ids || []).includes(t.id)} onChange={() => toggleTag(t.id)} />
+                            #{t.name}
+                          </label>
+                        ))}
+                        {tags.length > 0 && <hr />}
+                        <form className="row" style={{ padding: 6, flexWrap: "nowrap" }} onSubmit={createTag}>
+                          <input type="text" value={newTag} onChange={(e) => setNewTag(e.target.value)} placeholder="وسم جديد" style={{ flex: 1, minWidth: 0 }} />
+                          <button className="btn sm primary" disabled={!newTag.trim()}>أضف</button>
+                        </form>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <span className="spacer" />
               {staff && (
                 <div className="menu-wrap">

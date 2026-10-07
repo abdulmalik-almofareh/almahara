@@ -7,7 +7,7 @@ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { loadQuran, ar } from "@/lib/quran";
 import {
   addDays, fmtDay, fmtFull, fmtHijri, fmtWeekday, parseYmd, today, TYPES,
-  type Assignment, type ClassRow, type Guardian, type Invitation, type Me, type Member, type School, type Student,
+  type Assignment, type ClassRow, type ClassTeacher, type Guardian, type Invitation, type Me, type Member, type School, type SchoolRow, type Student, type Tag,
 } from "@/lib/model";
 import { isManager, isStaff, isStudent, ROLE_LABEL } from "@/lib/roles";
 import { AppContext, useApp as useApp2, type Ctx, type Drawer } from "./AppContext";
@@ -21,8 +21,9 @@ import { StudentDrawer, StudentForm } from "./StudentDrawer";
 import { NewAssignment } from "./Assignment";
 import { AssignmentModal } from "./AssignmentModal";
 import { MushafView } from "./Mushaf";
+import { GeneralSettings, MemberEdit, ProfileSettings, SettingsHub, TagsSettings, TypesSettings } from "./Settings";
 
-type View = "board" | "students" | "classes" | "members" | "settings" | "kids";
+type View = "board" | "students" | "classes" | "members" | "settings" | "kids" | "s-profile" | "s-general" | "s-types" | "s-tags";
 
 export default function Platform({ school, schools, me }: { school: School; schools: School[]; me: Me }) {
   const supabase = useMemo(() => createClient(), []);
@@ -40,6 +41,9 @@ export default function Platform({ school, schools, me }: { school: School; scho
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [studentUsers, setStudentUsers] = useState<{ student_id: string; user_id: string }[]>([]);
+  const [classTeachers, setClassTeachers] = useState<ClassTeacher[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [schoolRow, setSchoolRow] = useState<SchoolRow | null>(null);
   const [asg, setAsg] = useState<Record<string, Assignment>>({});
   const [drawers, setDrawers] = useState<Drawer[]>([]);
   const [toastMsg, setToastMsg] = useState("");
@@ -57,7 +61,7 @@ export default function Platform({ school, schools, me }: { school: School; scho
 
   const reloadBase = useCallback(async () => {
     const sid = school.id;
-    const [c, s, m, g, i, su] = await Promise.all([
+    const [c, s, m, g, i, su, ct, tg, sr] = await Promise.all([
       supabase.from("classes").select("*").eq("school_id", sid).order("name"),
       supabase.from("students").select("*").eq("school_id", sid).order("name"),
       supabase.from("memberships").select("*").eq("school_id", sid).order("created_at"),
@@ -66,7 +70,13 @@ export default function Platform({ school, schools, me }: { school: School; scho
         ? supabase.from("invitations").select("*").eq("school_id", sid).eq("status", "pending").order("created_at", { ascending: false })
         : Promise.resolve({ data: [] as Invitation[] }),
       staff ? supabase.from("student_users").select("student_id, user_id").eq("school_id", sid) : Promise.resolve({ data: [] }),
+      supabase.from("class_teachers").select("*").eq("school_id", sid),
+      supabase.from("tags").select("*").eq("school_id", sid).order("name"),
+      supabase.from("schools").select("*").eq("id", sid).maybeSingle(),
     ]);
+    setClassTeachers((ct.data as ClassTeacher[]) ?? []);
+    setTags((tg.data as Tag[]) ?? []);
+    setSchoolRow((sr.data as SchoolRow) ?? null);
     setClasses((c.data as ClassRow[]) ?? []);
     setStudents((s.data as Student[]) ?? []);
     setMembers((m.data as Member[]) ?? []);
@@ -120,6 +130,9 @@ export default function Platform({ school, schools, me }: { school: School; scho
 
   const ctx: Ctx = {
     supabase, school, me, role, staff, manager, classes, students, members, guardians, invitations, asg, depth: drawers.length,
+    classTeachers, tags, schoolRow,
+    myClassIds: classTeachers.filter((x) => x.user_id === me.id).map((x) => x.class_id),
+    go: (v) => { setView(v as View); window.scrollTo(0, 0); },
     toast, fail, reloadBase, loadStudentAsg, upsertAsg, dropAsg,
     open: (d) => setDrawers((s) => [...s, d]),
     replaceTop: (d) => setDrawers((s) => [...s.slice(0, -1), d]),
@@ -157,8 +170,16 @@ export default function Platform({ school, schools, me }: { school: School; scho
             <MembersView />
           ) : view === "kids" ? (
             <KidsView />
+          ) : view === "s-profile" ? (
+            <ProfileSettings />
+          ) : view === "s-general" ? (
+            <GeneralSettings />
+          ) : view === "s-types" ? (
+            <TypesSettings />
+          ) : view === "s-tags" ? (
+            <TagsSettings />
           ) : (
-            <SettingsView />
+            <SettingsHub />
           )}
         </main>
       </div>
@@ -180,6 +201,7 @@ function DrawerHost({ drawers }: { drawers: Drawer[] }) {
   else if (d.kind === "asg") body = <AssignmentModal key={"a" + d.id} id={d.id} />;
   else if (d.kind === "student-form") body = <StudentForm key={"f" + (d.id ?? "")} id={d.id} />;
   else if (d.kind === "class-form") body = <ClassForm key={"c" + d.id} id={d.id} />;
+  else if (d.kind === "member") body = <MemberEdit key={"u" + d.id} id={d.id} />;
   const wide = d.kind === "asg" || d.kind === "student";
   return (
     <>
@@ -193,7 +215,8 @@ function DrawerHost({ drawers }: { drawers: Drawer[] }) {
 
 /* ---------------- board ---------------- */
 function Board({ mergeAsg }: { mergeAsg: (rows: Assignment[]) => void }) {
-  const { supabase, school, students, classes, asg, open, manager, className, fail } = useApp2();
+  const { supabase, school, students, classes: allClasses, asg, open, manager, className, fail, myClassIds } = useApp2();
+  const classes = manager ? allClasses : allClasses.filter((c) => myClassIds.includes(c.id));
   const [classId, setClassId] = useState("all");
   const [span, setSpan] = useState(7);
   const [anchor, setAnchor] = useState(today());
@@ -295,7 +318,7 @@ function Board({ mergeAsg }: { mergeAsg: (rows: Assignment[]) => void }) {
               <tr>
                 <td colSpan={span + 1} className="grid-empty">
                   {!classes.length
-                    ? manager ? "ابدأ بإنشاء أول فصل من صفحة الفصول، ثم أضف الطلاب." : "لم يُنشئ المشرف أي فصل بعد."
+                    ? manager ? "ابدأ بإنشاء أول فصل من صفحة الفصول، ثم أضف الطلاب." : "لم تُسند لأي حلقة بعد. اطلب من المشرف إسنادك لحلقتك."
                     : search ? "لا يوجد طالب بهذا الاسم." : "لا يوجد طلاب في هذا الفصل بعد."}
                   {manager && classes.length > 0 && !search && <div style={{ marginTop: 10 }}><button className="btn primary" onClick={() => open({ kind: "student-form" })}>إضافة طالب</button></div>}
                 </td>
@@ -320,6 +343,7 @@ function Board({ mergeAsg }: { mergeAsg: (rows: Assignment[]) => void }) {
 
 /* ---------------- students ---------------- */
 function StudentsView() {
+  const { go: goTo } = useApp2();
   const { supabase, students, classes, guardians, members, manager, open, className, toast, fail, reloadBase } = useApp2();
   const [showInactive, setShowInactive] = useState(false);
   const list = students.filter((s) => showInactive || s.active);
@@ -335,6 +359,8 @@ function StudentsView() {
     reloadBase();
   }
   return (
+    <div className="set-page wide">
+    <button className="crumb" onClick={() => goTo("settings")}>› الإعدادات</button>
     <div className="panel">
       <div className="panel-h">
         <h2>الطلاب</h2>
@@ -373,21 +399,23 @@ function StudentsView() {
         <div className="empty" style={{ border: 0 }}><p>لا يوجد طلاب بعد.</p></div>
       )}
     </div>
+    </div>
   );
 }
 
 /* ---------------- classes ---------------- */
 function ClassesView() {
-  const { supabase, school, classes, students, manager, open, toast, fail, reloadBase } = useApp2();
+  const { supabase, school, classes, students, members, classTeachers, myClassIds, manager, open, go, toast, fail, reloadBase } = useApp2();
   const [name, setName] = useState("");
-  const [teacher, setTeacher] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const shown = manager ? classes : classes.filter((c) => myClassIds.includes(c.id));
+  const teachersOf = (cid: string) =>
+    classTeachers.filter((x) => x.class_id === cid).map((x) => members.find((m) => m.user_id === x.user_id)).filter(Boolean).map((m) => m!.display_name || m!.email);
   async function add(e: React.FormEvent) {
     e.preventDefault();
-    const { error } = await supabase.from("classes").insert({ school_id: school.id, name: name.trim(), teacher_name: teacher.trim() || null });
+    const { error } = await supabase.from("classes").insert({ school_id: school.id, name: name.trim() });
     if (error) return fail(error);
     setName("");
-    setTeacher("");
     toast("أُنشئ الفصل");
     reloadBase();
   }
@@ -403,62 +431,86 @@ function ClassesView() {
     reloadBase();
   }
   return (
-    <>
-      <div className="row" style={{ marginBottom: 14 }}><h1>الفصول</h1></div>
+    <div className="set-page wide">
+      <button className="crumb" onClick={() => go("settings")}>› الإعدادات</button>
+      <h1>الفصول</h1>
       {manager && (
-        <form className="form" onSubmit={add} style={{ marginBottom: 14 }}>
-          <div className="form-row">
-            <label className="f"><span>اسم الفصل</span><input id="newClassName" type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="مثل: حلقة المهرة" /></label>
-            <label className="f"><span>اسم المعلم (اختياري)</span><input id="newClassTeacher" type="text" value={teacher} onChange={(e) => setTeacher(e.target.value)} /></label>
-          </div>
-          <div><button className="btn primary" disabled={!name.trim()}>إضافة فصل</button></div>
+        <form className="row" onSubmit={add}>
+          <input id="newClassName" type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="اسم الحلقة الجديدة، مثل: حلقة المهرة" style={{ flex: 1 }} />
+          <button className="btn primary" disabled={!name.trim()}>أضف فصلاً</button>
         </form>
       )}
-      {classes.length ? (
-        <div className="cls-grid">
-          {classes.map((c) => {
+      {shown.length ? (
+        <div className="panel">
+          {shown.map((c) => {
             const n = students.filter((s) => s.class_id === c.id && s.active).length;
+            const t = teachersOf(c.id);
             return (
-              <div key={c.id} className="panel cls">
-                <div className="row"><h3>{c.name}</h3><span className="spacer" /><span className="sub">{ar(n)} طالب</span></div>
-                {c.teacher_name && <div className="sub">المعلم: {c.teacher_name}</div>}
-                {manager && (
-                  <div className="row">
-                    <button className="btn sm" onClick={() => open({ kind: "class-form", id: c.id })}>تعديل</button>
-                    {!n && <button className="btn sm danger" onClick={() => remove(c.id)}>{confirmId === c.id ? "تأكيد الحذف؟" : "حذف"}</button>}
-                  </div>
-                )}
+              <div key={c.id} className="tag-row">
+                <div style={{ display: "grid", flex: 1, gap: 2 }}>
+                  <b>{c.name}</b>
+                  <span className="sub">{ar(n)} {n > 2 && n < 11 ? "طلاب" : "طالب"} · {t.length ? t.join("، ") : <span style={{ color: "var(--h)" }}>بدون معلم</span>}</span>
+                </div>
+                {manager && <button className="btn sm" onClick={() => open({ kind: "class-form", id: c.id })}>تعديل</button>}
+                {manager && !n && <button className="btn sm danger" onClick={() => remove(c.id)}>{confirmId === c.id ? "تأكيد الحذف؟" : "حذف"}</button>}
               </div>
             );
           })}
         </div>
       ) : (
-        <div className="empty"><p>لا توجد فصول بعد.</p></div>
+        <div className="empty"><p>{manager ? "لا توجد فصول بعد." : "لم تُسند لأي حلقة بعد. اطلب من المشرف إسنادك لحلقتك."}</p></div>
       )}
-    </>
+    </div>
   );
 }
 
 function ClassForm({ id }: { id?: string }) {
-  const { supabase, classes, back, toast, fail, reloadBase } = useApp2();
+  const { supabase, classes, members, classTeachers, back, toast, fail, reloadBase } = useApp2();
   const c = classes.find((x) => x.id === id);
   const [name, setName] = useState(c?.name ?? "");
-  const [teacher, setTeacher] = useState(c?.teacher_name ?? "");
+  const was = classTeachers.filter((x) => x.class_id === id).map((x) => x.user_id);
+  const [sel, setSel] = useState<string[]>(was);
+  const staffM = members.filter((m) => m.role === "owner" || m.role === "admin" || m.role === "teacher");
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    const { error } = await supabase.from("classes").update({ name: name.trim(), teacher_name: teacher.trim() || null }).eq("id", id!);
-    if (error) return fail(error);
-    toast("حُفظ الفصل");
-    await reloadBase();
-    back();
+    try {
+      const { error } = await supabase.from("classes").update({ name: name.trim() }).eq("id", id!);
+      if (error) throw error;
+      const add = sel.filter((u) => !was.includes(u)), rm = was.filter((u) => !sel.includes(u));
+      if (add.length) {
+        const r = await supabase.from("class_teachers").insert(add.map((u) => ({ class_id: id, user_id: u })));
+        if (r.error) throw r.error;
+      }
+      if (rm.length) {
+        const r = await supabase.from("class_teachers").delete().eq("class_id", id!).in("user_id", rm);
+        if (r.error) throw r.error;
+      }
+      toast("حُفظ الفصل");
+      await reloadBase();
+      back();
+    } catch (err) {
+      fail(err);
+    }
   }
   return (
     <Shell head={<div className="t"><b>تعديل الفصل</b></div>}>
-    <form className="form" onSubmit={save}>
-      <label className="f"><span>اسم الفصل</span><input id="eClassName" type="text" required value={name} onChange={(e) => setName(e.target.value)} /></label>
-      <label className="f"><span>اسم المعلم</span><input id="eClassTeacher" type="text" value={teacher} onChange={(e) => setTeacher(e.target.value)} /></label>
-      <div><button className="btn primary">حفظ</button></div>
-    </form>
+      <form className="form" onSubmit={save}>
+        <label className="f"><span>اسم الفصل</span><input id="eClassName" type="text" required value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <div style={{ display: "grid", gap: 4 }}>
+          <span className="sub">معلمو الحلقة (يرون طلابها ويسمّعون لهم)</span>
+          <div className="multi">
+            {staffM.map((m) => (
+              <label key={m.user_id}>
+                <input type="checkbox" checked={sel.includes(m.user_id)} onChange={(e) => setSel(e.target.checked ? [...sel, m.user_id] : sel.filter((x) => x !== m.user_id))} />
+                {m.display_name || m.email}
+                <span className="sub" style={{ marginInlineStart: "auto" }}>{ROLE_LABEL[m.role]}</span>
+              </label>
+            ))}
+            {staffM.length <= 1 && <span className="sub">ادعُ المعلمين من صفحة الأعضاء ليظهروا هنا.</span>}
+          </div>
+        </div>
+        <div><button className="btn primary">حفظ</button></div>
+      </form>
     </Shell>
   );
 }
@@ -485,51 +537,6 @@ function KidsView() {
         <div className="empty"><p>{role === "student" ? "لم يُربط حسابك بسجل طالب بعد. اطلب من معلمك إرسال دعوة طالب." : "لم يُربط أي طالب بحسابك بعد. اطلب من المشرف إرسال دعوة ولي أمر لأبنائك."}</p></div>
       )}
     </>
-  );
-}
-
-/* ---------------- settings ---------------- */
-function SettingsView() {
-  const { supabase, me, role, toast, fail, reloadBase } = useApp2();
-  const [name, setName] = useState(me.name);
-  async function saveName(e: React.FormEvent) {
-    e.preventDefault();
-    const { error } = await supabase.rpc("set_display_name", { p_name: name });
-    if (error) return fail(error);
-    toast("حُفظ اسمك");
-    reloadBase();
-  }
-  return (
-    <div style={{ display: "grid", gap: 14, maxWidth: 760 }}>
-      <h1>الإعدادات</h1>
-      <div className="panel" style={{ padding: 16, display: "grid", gap: 10 }}>
-        <h2>حسابك</h2>
-        <div className="sub">البريد: <b dir="ltr">{me.email}</b> · دورك: <span className="role-pill">{ROLE_LABEL[role]}</span></div>
-        <form className="row" onSubmit={saveName}>
-          <label className="f" style={{ flex: 1 }}><span>الاسم الظاهر للآخرين</span><input id="displayName" type="text" value={name} onChange={(e) => setName(e.target.value)} /></label>
-          <button className="btn primary" style={{ alignSelf: "end" }}>حفظ</button>
-        </form>
-      </div>
-      <div className="panel" style={{ padding: 16, display: "grid", gap: 8 }}>
-        <h2>الأدوار</h2>
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead><tr><th>الدور</th><th>ما يستطيعه</th></tr></thead>
-            <tbody>
-              <tr><td><b>المالك</b></td><td>كل الصلاحيات، ودعوة المشرفين</td></tr>
-              <tr><td><b>مشرف</b></td><td>إدارة الفصول والطلاب، ودعوة المعلمين وأولياء الأمور، والتسميع</td></tr>
-              <tr><td><b>معلم</b></td><td>إضافة الواجبات والتسميع وتسجيل الأخطاء لكل طلاب المدرسة</td></tr>
-              <tr><td><b>ولي أمر</b></td><td>متابعة أبنائه فقط، دون تعديل</td></tr>
-              <tr><td><b>طالب</b></td><td>يرى واجباته وأخطاءه، ويعلّق على الواجب، ويؤكد أنه راجع أخطاءه</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div className="panel" style={{ padding: 16, display: "grid", gap: 6 }}>
-        <h2>المصحف</h2>
-        <p style={{ margin: 0 }}>النص برواية حفص عن عاصم، وتقسيم الصفحات والأجزاء على مصحف المدينة (٦٠٤ صفحات).</p>
-      </div>
-    </div>
   );
 }
 

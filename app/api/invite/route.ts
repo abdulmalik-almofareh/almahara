@@ -10,6 +10,7 @@ const MESSAGES: Record<string, string> = {
   "parent needs students": "اختر ابناً واحداً على الأقل لولي الأمر.",
   "student not in school": "أحد الطلاب المختارين ليس في هذه المدرسة.",
   "student needs one student": "اختر سجل الطالب الذي سيُربط بالحساب.",
+  "class not in school": "إحدى الحلقات المختارة ليست في هذه المدرسة.",
 };
 
 export async function POST(request: NextRequest) {
@@ -17,13 +18,13 @@ export async function POST(request: NextRequest) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "سجّل الدخول أولاً." }, { status: 401 });
 
-  let body: { schoolId?: string; email?: string; role?: Role; studentIds?: string[] };
+  let body: { schoolId?: string; email?: string; role?: Role; studentIds?: string[]; classIds?: string[] };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "طلب غير صالح." }, { status: 400 });
   }
-  const { schoolId, email, role, studentIds = [] } = body;
+  const { schoolId, email, role, studentIds = [], classIds = [] } = body;
   if (!schoolId || !email || !role) return NextResponse.json({ error: "أكمل البيانات." }, { status: 400 });
 
   // The database function checks the caller's permission, so this route cannot be used to bypass it.
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
     p_email: email,
     p_role: role,
     p_student_ids: role === "parent" || role === "student" ? studentIds : [],
+    p_class_ids: role === "teacher" || role === "admin" ? classIds : [],
   });
   if (error || !data?.[0]) {
     return NextResponse.json({ error: MESSAGES[error?.message ?? ""] || "تعذّر إنشاء الدعوة." }, { status: 400 });
