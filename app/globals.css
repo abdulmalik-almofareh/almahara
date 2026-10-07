@@ -438,3 +438,70 @@ table.grid{table-layout:fixed;width:100%;min-width:calc(180px + var(--days,7) * 
 .qb.s{border-left:0;margin-left:.06em}
 .qb.e{border-right:0;margin-right:.06em}
 @media (max-width:700px){.mf-stage{padding:4px}}
+
+/* ===== v5: الجوال ===== */
+.mtop,.mnav,.mday-bar,.mlist{display:none}
+.msheet{position:fixed;inset-inline:0;bottom:0;z-index:46;background:var(--surface);border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));display:grid;gap:12px;box-shadow:var(--shadow);max-height:80vh;overflow:auto}
+.msheet-list{display:grid;gap:2px}
+.msheet .side-item{font-size:16px;padding:12px}
+@media (max-width:700px){
+  .side{display:none}
+  .mtop{display:flex;align-items:center;gap:10px;position:fixed;top:0;inset-inline:0;z-index:40;height:calc(52px + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 14px 0;background:var(--surface);border-bottom:1px solid var(--line)}
+  .mtop .side-logo{width:32px;height:32px;border-radius:9px}
+  .mtop b{font-family:var(--f-display);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mnav{display:flex;position:fixed;bottom:0;inset-inline:0;z-index:40;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+  .mnav button{flex:1;display:grid;justify-items:center;gap:3px;padding:8px 2px 7px;background:none;border:0;color:var(--muted);font-size:11.5px;min-width:0}
+  .mnav button span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .mnav button[aria-current="true"]{color:var(--accent);font-weight:600}
+  .main{padding:calc(64px + env(safe-area-inset-top,0px)) 12px calc(84px + env(safe-area-inset-bottom,0px))}
+  .toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+
+  /* لا شيء يتجاوز عرض الشاشة */
+  .set-page>*,.panel,.form{min-width:0;max-width:100%}
+  .form-row{grid-template-columns:1fr}
+  .form-row .f input,.form-row .f select{width:100%;min-width:0}
+  .panel-h .btn{margin-inline-start:auto}
+
+  /* الجداول تتحول إلى بطاقات */
+  .tbl.stack thead{display:none}
+  .tbl.stack,.tbl.stack tbody{display:block}
+  .tbl.stack tr{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .tbl.stack tr:last-child{border-bottom:0}
+  .tbl.stack td{display:block;padding:0;border:0;font-size:14px}
+  .tbl.stack td:first-child{font-size:16px}
+  .tbl.stack td[data-l]{grid-column:1 / -1;font-size:13px}
+  .tbl.stack td[data-l]::before{content:attr(data-l) ": ";color:var(--muted)}
+  .tbl.stack td.end{grid-column:2;grid-row:1;align-self:center}
+  .tbl.stack td.end select{max-width:150px}
+
+  /* لوحة التحكم: بطاقات بدل الجدول */
+  .board .grid-wrap,.board .toolbar,.board .legend,.board-top .btn{display:none}
+  .board-top{margin-bottom:8px}
+  .mday-bar{display:flex;align-items:center;gap:4px;margin-bottom:10px}
+  .mday-bar .d{flex:1;text-align:center;font-weight:600;font-size:15px}
+  .mday-bar .d small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+  .msearch{width:100%;margin-bottom:10px}
+  .mlist{display:grid;gap:10px;touch-action:pan-y}
+  .mstu{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:8px}
+  .mstu-h{display:flex;align-items:baseline;gap:8px}
+  .mstu-h .stu-btn{font-size:16px;font-weight:600}
+  .mstu .add{opacity:1;height:38px;font-size:14px}
+
+  .types-tbl td:first-child,.types-tbl th:first-child{min-width:120px}
+  .types-tbl td:first-child b{white-space:nowrap}
+}
+@media (max-width:700px){
+  .types-tbl .type-h > span:last-child{display:none}
+  .types-tbl td:first-child,.types-tbl th:first-child{position:sticky;inset-inline-start:0;z-index:1;background:var(--surface)}
+  .types-tbl th:first-child{background:var(--surface-2)}
+}
+.phone{display:block;text-align:end}
+@media (max-width:700px){
+  .phone{display:inline;margin-right:6px}
+  .tbl.stack td.full{grid-column:1 / -1}
+  .tbl.stack td.hide-m{display:none}
+  .tbl.stack td.ell{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+  .tbl.stack .side-avatar{width:34px;height:34px}
+  .panel-h .grow-m{flex:1 1 100%;order:5;width:auto!important;min-width:0}
+}
+@media (max-width:700px){.board-top .tabs button{padding:8px 10px}.main{padding-top:calc(58px + env(safe-area-inset-top,0px))}}
