@@ -76,7 +76,7 @@ export function MembersView() {
         </div>
         {(invRole === "teacher" || invRole === "admin") && classes.length > 0 && (
           <div style={{ display: "grid", gap: 4 }}>
-            <span className="sub">الحلقات التي يدرّسها {invRole === "teacher" ? "(يرى طلابها فقط)" : "(اختياري، المشرف يرى كل الحلقات)"}</span>
+            <span className="sub">الحلقات التي يدرّسها {invRole === "teacher" ? "(يرى طلابها فقط)" : "(اختياري، تظهر له في «حلقتي»)"}</span>
             <div className="multi">
               {classes.map((c) => (
                 <label key={c.id}>
@@ -131,15 +131,15 @@ export function MembersView() {
         <div className="panel">
           <div className="panel-h"><h2>دعوات بانتظار القبول</h2><span className="sub">{invitations.length}</span></div>
           <div className="tbl-wrap">
-            <table className="tbl">
+            <table className="tbl stack">
               <thead><tr><th>البريد</th><th>الدور</th><th>أُرسلت</th><th></th></tr></thead>
               <tbody>
                 {invitations.map((i) => (
                   <tr key={i.id}>
-                    <td dir="ltr" style={{ textAlign: "end" }}>{i.email}</td>
-                    <td>{ROLE_LABEL[i.role]}{i.student_ids.length > 0 && <div className="sub">{kidNames(i.student_ids)}</div>}{(i.class_ids ?? []).length > 0 && <div className="sub">{i.class_ids.map((c) => classes.find((x) => x.id === c)?.name).filter(Boolean).join("، ")}</div>}</td>
-                    <td className="muted">{fmtDay.format(new Date(i.created_at))}</td>
-                    <td>
+                    <td dir="ltr" style={{ textAlign: "end" }} className="ell">{i.email}</td>
+                    <td className="end">{ROLE_LABEL[i.role]}{i.student_ids.length > 0 && <div className="sub">{kidNames(i.student_ids)}</div>}{(i.class_ids ?? []).length > 0 && <div className="sub">{i.class_ids.map((c) => classes.find((x) => x.id === c)?.name).filter(Boolean).join("، ")}</div>}</td>
+                    <td className="muted" data-l="أُرسلت">{fmtDay.format(new Date(i.created_at))}</td>
+                    <td className="full">
                       <div className="row">
                         <button className="btn sm" onClick={() => copy(`${site}/invite/${i.token}`)}>نسخ الرابط</button>
                         <button className="btn sm danger" onClick={() => revoke(i.id)}>إلغاء</button>
@@ -156,14 +156,14 @@ export function MembersView() {
       <div className="panel">
         <div className="panel-h">
           <h2>الأعضاء</h2><span className="sub">{members.length}</span><span className="spacer" />
-          <input type="search" id="memberSearch" placeholder="ابحث في الأعضاء…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: 220 }} />
+          <input type="search" id="memberSearch" placeholder="ابحث في الأعضاء…" value={filter} onChange={(e) => setFilter(e.target.value)} className="grow-m" style={{ width: 220 }} />
           <select id="memberRole" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
             <option value="">كل الأدوار</option>
             {(["owner", "admin", "teacher", "parent", "student"] as Role[]).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </select>
         </div>
         <div className="tbl-wrap">
-          <table className="tbl">
+          <table className="tbl stack">
             <thead><tr><th>العضو</th><th>الوصول</th><th>الحلقات أو الطلاب</th><th></th></tr></thead>
             <tbody>
               {members
@@ -185,9 +185,9 @@ export function MembersView() {
                           </div>
                         </div>
                       </td>
-                      <td>{access.join(" · ")}</td>
-                      <td className="muted">{staffM ? teaches.join("، ") || (m.role === "teacher" ? "لم يُسند لحلقة" : "كل الحلقات") : kidNames(kidsOf) || "—"}</td>
-                      <td><button className="link-btn" onClick={(e) => { e.stopPropagation(); open({ kind: "member", id: m.user_id }); }}>تحرير</button></td>
+                      <td className="end">{access.join(" · ")}</td>
+                      <td className="muted" data-l={staffM ? "الحلقات" : "الطلاب"}>{staffM ? teaches.join("، ") || (m.role === "teacher" ? "لم يُسند لحلقة" : "كل الحلقات") : kidNames(kidsOf) || "—"}</td>
+                      <td className="hide-m"><button className="link-btn" onClick={(e) => { e.stopPropagation(); open({ kind: "member", id: m.user_id }); }}>تحرير</button></td>
                     </tr>
                   );
                 })}

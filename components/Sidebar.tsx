@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { useApp } from "./AppContext";
 import { ROLE_LABEL } from "@/lib/roles";
 import type { School } from "@/lib/model";
-import { IconBook, IconHome, IconLogout, IconMenu, IconSchool, IconSettings, IconStudy, IconTeam, IconUsers } from "./icons";
+import { IconBook, IconHome, IconLogout, IconMenu, IconSchool, IconSettings, IconStudy, IconTeam, IconUsers, IconX } from "./icons";
 
 type Item = { v: string; label: string; icon: React.ReactNode };
 
 export function Sidebar({ view, setView, schools, onSwitch }: { view: string; setView: (v: string) => void; schools: School[]; onSwitch: (id: string) => void }) {
   const { school, role, staff, manager, me, schoolRow, myClassIds } = useApp();
   const [collapsed, setCollapsed] = useState(false);
+  const [more, setMore] = useState(false);
 
   useEffect(() => {
     try {
@@ -50,7 +51,68 @@ export function Sidebar({ view, setView, schools, onSwitch }: { view: string; se
     </button>
   );
 
+  /* الجوال: شريط علوي رفيع + شريط تنقّل سفلي + لوحة «المزيد» */
+  const bottom: Item[] = staff
+    ? [main[0], ...(manager ? [main[1]] : []), { v: "students", label: "الطلاب", icon: <IconUsers /> }]
+    : [main[0]];
+  const moreItems: Item[] = [
+    ...(staff ? [{ v: "classes", label: "الفصول", icon: <IconSchool /> }] : []),
+    ...(manager ? [{ v: "members", label: "الأعضاء", icon: <IconTeam /> }] : []),
+    { v: "settings", label: "الإعدادات", icon: <IconSettings /> },
+  ];
+  const inMore = !bottom.some((it) => it.v === view);
+  const pick = (v: string) => { setMore(false); setView(v); };
+  const logo = <span className="side-logo">{schoolRow?.logo_url ? <img src={schoolRow.logo_url} alt="" /> : <IconBook size={22} />}</span>;
+
+  const mobile = (
+    <>
+      <header className="mtop">
+        {logo}
+        <b>{schoolRow?.name ?? school.name}</b>
+      </header>
+      <nav className="mnav" aria-label="التنقل">
+        {bottom.map((it) => (
+          <button key={it.v} aria-current={view === it.v} onClick={() => pick(it.v)}>{it.icon}<span>{it.label}</span></button>
+        ))}
+        <button aria-current={inMore || more} aria-expanded={more} onClick={() => setMore(!more)}><IconMenu /><span>المزيد</span></button>
+      </nav>
+      {more && (
+        <>
+          <div className="scrim" onClick={() => setMore(false)} />
+          <div className="msheet" role="dialog" aria-label="المزيد">
+            <div className="row">
+              <span className="side-avatar">{(me.name || me.email).slice(0, 1).toUpperCase()}</span>
+              <div style={{ display: "grid", minWidth: 0, flex: 1 }}>
+                <b className="side-name">{me.name || me.email}</b>
+                <span className="sub">{ROLE_LABEL[role]} · {schoolRow?.name ?? school.name}</span>
+              </div>
+              <button className="icon-btn" aria-label="إغلاق" onClick={() => setMore(false)}><IconX /></button>
+            </div>
+            {schools.length > 1 && (
+              <label className="f">
+                <span>المجمع</span>
+                <select value={school.id} onChange={(e) => { setMore(false); onSwitch(e.target.value); }}>
+                  {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </label>
+            )}
+            <div className="msheet-list">
+              {moreItems.map((it) => (
+                <button key={it.v} className="side-item" aria-current={view === it.v || (it.v === "settings" && view.startsWith("s-"))} onClick={() => pick(it.v)}>{it.icon}<span>{it.label}</span></button>
+              ))}
+              <form action="/auth/signout" method="post">
+                <button className="side-item"><IconLogout /><span>تسجيل الخروج</span></button>
+              </form>
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+
   return (
+    <>
+    {mobile}
     <aside className={"side" + (collapsed ? " collapsed" : "")}>
       <div className="side-head">
         <span className="side-logo">{schoolRow?.logo_url ? <img src={schoolRow.logo_url} alt="" /> : <IconBook size={22} />}</span>
@@ -88,5 +150,6 @@ export function Sidebar({ view, setView, schools, onSwitch }: { view: string; se
         </div>
       </div>
     </aside>
+    </>
   );
 }

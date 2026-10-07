@@ -13,7 +13,7 @@ import { isManager, isStaff, isStudent, ROLE_LABEL } from "@/lib/roles";
 import { AppContext, useApp as useApp2, type Ctx, type Drawer } from "./AppContext";
 import { Shell } from "./Shell";
 import { AsgCard, TypeBadge } from "./AsgCard";
-import { IconLeft, IconLeft2, IconRight, IconRight2 } from "./icons";
+import { IconLeft, IconLeft2, IconRight, IconRight2, IconSearch } from "./icons";
 import { Sidebar } from "./Sidebar";
 import { Brand } from "./Brand";
 import { MembersView } from "./Members";
@@ -224,10 +224,21 @@ function Board({ mergeAsg, mine = false }: { mergeAsg: (rows: Assignment[]) => v
   const [span, setSpan] = useState(7);
   const [anchor, setAnchor] = useState(today());
   const [search, setSearch] = useState("");
+  const [mobile, setMobile] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const touch = useRef<{ x: number; y: number } | null>(null);
   const td = today();
 
+  // الجوال: يوم واحد وبطاقات بدل الجدول
   useEffect(() => {
-    if (window.innerWidth < 640) setSpan(1);
+    const mq = window.matchMedia("(max-width: 700px)");
+    const on = () => {
+      setMobile(mq.matches);
+      if (mq.matches) setSpan(1);
+    };
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
   }, []);
 
   const days = useMemo(() => {
@@ -287,6 +298,59 @@ function Board({ mergeAsg, mine = false }: { mergeAsg: (rows: Assignment[]) => v
           ))}
         </div>
       </div>
+      {mobile && (
+        <>
+          <div className="mday-bar">
+            <button className="icon-btn" aria-label="اليوم السابق" onClick={() => setAnchor(addDays(anchor, -1))}><IconRight /></button>
+            <div className="d">
+              {days[0] === td ? "اليوم" : fmtWeekday.format(parseYmd(days[0]))}
+              <small>{fmtDay.format(parseYmd(days[0]))} · {ar(list.length)} طلاب</small>
+            </div>
+            <button className="icon-btn" aria-label="اليوم التالي" onClick={() => setAnchor(addDays(anchor, 1))}><IconLeft /></button>
+            {days[0] !== td && <button className="btn sm" onClick={() => setAnchor(today())}>اليوم</button>}
+            <button className="icon-btn" aria-label="بحث" aria-pressed={searchOpen} onClick={() => { setSearchOpen(!searchOpen); if (searchOpen) setSearch(""); }}><IconSearch /></button>
+          </div>
+          {searchOpen && <input type="search" className="msearch" autoFocus placeholder="ابحث عن الطلاب…" value={search} onChange={(e) => setSearch(e.target.value.trim())} aria-label="بحث" />}
+          <div
+            className="mlist"
+            onTouchStart={(e) => { touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }}
+            onTouchEnd={(e) => {
+              const st = touch.current;
+              touch.current = null;
+              if (!st) return;
+              const dx = e.changedTouches[0].clientX - st.x, dy = e.changedTouches[0].clientY - st.y;
+              if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+              // السحب لليمين = اليوم التالي (اتجاه عربي)
+              setAnchor(addDays(anchor, dx > 0 ? 1 : -1));
+            }}
+          >
+            {list.map((s) => {
+              const items = (by[s.id + "|" + days[0]] || []).sort((x, y) => x.created_at.localeCompare(y.created_at));
+              return (
+                <div key={s.id} className="mstu">
+                  <div className="mstu-h">
+                    <button className="stu-btn" onClick={() => open({ kind: "student", id: s.id, tab: "tasks" })}>{s.name}</button>
+                    {classId === "all" && <span className="sub">{className(s.class_id)}</span>}
+                  </div>
+                  {items.map((a) => <AsgCard key={a.id} a={a} />)}
+                  <button className="add" onClick={() => open({ kind: "new-asg", id: s.id, date: days[0] })}>+ واجب</button>
+                </div>
+              );
+            })}
+            {!list.length && (
+              <div className="empty">
+                <p>
+                  {mine && !classes.length
+                    ? "أنت لا تدرّس أي حلقة. لإضافة حلقتك: الأعضاء ← اضغط على اسمك ← «الحلقات التي أدرّسها»."
+                    : !classes.length
+                      ? manager ? "ابدأ بإنشاء أول فصل من صفحة الفصول، ثم أضف الطلاب." : "لم تُسند لأي حلقة بعد. اطلب من المشرف إسنادك لحلقتك."
+                      : search ? "لا يوجد طالب بهذا الاسم." : "لا يوجد طلاب في هذا الفصل بعد."}
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
       <div className="grid-wrap">
         <table className="grid" style={{ ["--days" as string]: span }}>
           <thead>
@@ -380,7 +444,7 @@ function StudentsView() {
       </div>
       {list.length ? (
         <div className="tbl-wrap">
-          <table className="tbl">
+          <table className="tbl stack">
             <thead><tr><th>الطالب</th><th>الفصل</th><th>ولي الأمر</th><th>حسابات أولياء الأمور</th></tr></thead>
             <tbody>
               {list.map((s) => (
@@ -389,7 +453,7 @@ function StudentsView() {
                     <button className="stu-btn" onClick={() => open({ kind: "student", id: s.id, tab: "tasks" })}>{s.name}</button>
                     {!s.active && <> <span className="pill s">غير نشط</span></>}
                   </td>
-                  <td>
+                  <td className="end">
                     {manager ? (
                       <select aria-label="الفصل" value={s.class_id ?? ""} onChange={(e) => move(s, e.target.value)}>
                         {!s.class_id && <option value="">بدون فصل</option>}
@@ -397,8 +461,8 @@ function StudentsView() {
                       </select>
                     ) : className(s.class_id)}
                   </td>
-                  <td className="muted">{s.guardian_name || "—"}{s.guardian_phone && <div dir="ltr" style={{ textAlign: "end" }}>{s.guardian_phone}</div>}</td>
-                  <td className="muted">{parentsOf(s.id).join("، ") || "لم يُدعَ بعد"}</td>
+                  <td className="muted" data-l="ولي الأمر">{s.guardian_name || "—"}{s.guardian_phone && <span dir="ltr" className="phone">{s.guardian_phone}</span>}</td>
+                  <td className="muted" data-l="حساب ولي الأمر">{parentsOf(s.id).join("، ") || "لم يُدعَ بعد"}</td>
                 </tr>
               ))}
             </tbody>

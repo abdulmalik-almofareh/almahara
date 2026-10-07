@@ -32,3 +32,4 @@ export const IconCheck = svg(<path d="M5 12l5 5 9-10" />);
 export const IconSend = svg(<path d="M20 4L3 11l7 2 2 7 8-16zM10 13l4-4" />);
 export const IconPen = svg(<path d="M12 20h8M4 16l11-11 4 4L8 20H4z" />);
 export const IconStudy = svg(<path d="M4 5h11a3 3 0 013 3v11H7a3 3 0 01-3-3zM18 19h2V8M8 9h6M8 12h4" />);
+export const IconSearch = svg(<><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4" /></>);
