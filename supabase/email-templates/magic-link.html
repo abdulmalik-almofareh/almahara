@@ -1,0 +1,15 @@
+<!-- انسخ هذا القالب في Supabase: Authentication → Emails → Templates
+     ضعه في «Magic link» وفي «Confirm signup»
+     العنوان المقترح (Subject): رمز الدخول إلى المهرة: {{ .Token }} -->
+<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;background:#EEF2F0;padding:28px 12px;color:#14201C">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #D5DEDA;border-radius:14px;padding:26px;text-align:right">
+    <div style="text-align:center;font-size:26px;font-weight:bold;color:#17675A;margin-bottom:12px">المهرة</div>
+    <p style="font-size:16px;margin:0 0 12px">السلام عليكم، هذا رمز الدخول إلى المنصة:</p>
+    <div style="text-align:center;font-size:30px;font-weight:bold;letter-spacing:8px;direction:ltr;background:#DCEDE8;color:#17675A;border-radius:10px;padding:12px;margin:0 0 16px">{{ .Token }}</div>
+    <p style="font-size:14px;color:#5A6A64;margin:0 0 16px">أو اضغط الزر للدخول مباشرة:</p>
+    <div style="text-align:center;margin-bottom:16px">
+      <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next={{ .RedirectTo }}" style="display:inline-block;background:#17675A;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 28px;border-radius:8px">الدخول إلى المهرة</a>
+    </div>
+    <p style="font-size:12px;color:#5A6A64;margin:0">الرمز صالح لمدة ساعة. إن لم تطلب الدخول فتجاهل هذه الرسالة.</p>
+  </div>
+</div>
