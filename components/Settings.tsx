@@ -402,22 +402,94 @@ export function MemberEdit({ id }: { id: string }) {
   const [confirmRm, setConfirmRm] = useState(false);
 
   if (!m) return <Shell head={<div className="t"><b>العضو غير موجود</b></div>}>{null}</Shell>;
-  if (m.role === "owner")
+  const isSelf = m.user_id === me.id;
+  const ownerTarget = m.role === "owner";
+
+  const classPicker = (
+    <section className="form">
+      <div className="sub">التدريس</div>
+      <b>{isSelf ? "الحلقات التي أدرّسها" : "الحلقات التي يدرّسها"}</b>
+      <span className="sub">
+        {ownerTarget || admin
+          ? "تظهر هذه الحلقات في خانة «حلقتي» بالقائمة الجانبية. ويبقى الوصول لكل الحلقات من لوحة التحكم."
+          : "المعلم يرى طلاب هذه الحلقات فقط، ويسجّل واجباتهم ويسمّع لهم."}
+      </span>
+      <div className="multi">
+        {classes.map((c) => (
+          <label key={c.id}>
+            <input type="checkbox" checked={cls.includes(c.id)} onChange={(e) => setCls(e.target.checked ? [...cls, c.id] : cls.filter((x) => x !== c.id))} />
+            {c.name}
+            <span className="sub" style={{ marginInlineStart: "auto" }}>{ar(students.filter((s) => s.class_id === c.id && s.active).length)} طالب</span>
+          </label>
+        ))}
+        {!classes.length && <span className="sub">لا توجد فصول بعد.</span>}
+      </div>
+    </section>
+  );
+
+  async function saveClasses() {
+    const was = classTeachers.filter((x) => x.user_id === id).map((x) => x.class_id);
+    const add = cls.filter((c) => !was.includes(c)), rm = was.filter((c) => !cls.includes(c));
+    if (add.length) {
+      const { error } = await supabase.from("class_teachers").insert(add.map((c) => ({ class_id: c, user_id: id })));
+      if (error) throw error;
+    }
+    if (rm.length) {
+      const { error } = await supabase.from("class_teachers").delete().eq("user_id", id).in("class_id", rm);
+      if (error) throw error;
+    }
+  }
+
+  if (ownerTarget) {
+    const mine = classTeachers.filter((x) => x.user_id === id).map((x) => className(x.class_id));
     return (
       <Shell head={<div className="t"><b>{m.display_name || m.email}</b><span className="sub" dir="ltr" style={{ textAlign: "end" }}>{m.email}</span></div>}>
-        <section className="form">
-          <div className="row">
-            <div style={{ flex: 1, display: "grid", gap: 4 }}>
-              <b>مالك المدرسة</b>
-              <span className="sub">المالك يملك كل الصلاحيات ويرى كل الحلقات، ولا يمكن لأحد تعديل صلاحياته أو إزالته.</span>
-              {m.user_id === me.id && <span className="sub">لتسليم المدرسة لشخص آخر استخدم «نقل الملكية» من الإعدادات ← عام.</span>}
+        <div className="set-page" style={{ padding: 0 }}>
+          <section className="form">
+            <div className="row">
+              <div style={{ flex: 1, display: "grid", gap: 4 }}>
+                <b>مالك المدرسة</b>
+                <span className="sub">المالك يملك كل الصلاحيات ويرى كل الحلقات، ولا يمكن لأحد غيره تعديل صلاحياته أو إزالته.</span>
+                {isSelf && <span className="sub">لتسليم المدرسة لشخص آخر استخدم «نقل الملكية» من الإعدادات ← عام.</span>}
+              </div>
+              <span className="role-pill">المالك</span>
             </div>
-            <span className="role-pill">المالك</span>
-          </div>
-        </section>
+          </section>
+          {isSelf ? (
+            <>
+              {classPicker}
+              <div className="row">
+                <button
+                  className="btn primary"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await saveClasses();
+                      toast("حُفظت حلقاتك");
+                      await reloadBase();
+                      back();
+                    } catch (e) {
+                      fail(e);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  {busy ? "جارٍ الحفظ…" : "حفظ حلقاتي"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <section className="form">
+              <div className="sub">التدريس</div>
+              <span>{mine.length ? mine.join("، ") : "لا يدرّس أي حلقة."}</span>
+            </section>
+          )}
+        </div>
       </Shell>
     );
-  const isSelf = m.user_id === me.id;
+  }
   const canToggleAdmin = staffTarget && myRole === "owner" && !isSelf;
   const canRemove = !isSelf && (m.role !== "admin" || myRole === "owner");
 
@@ -432,16 +504,7 @@ export function MemberEdit({ id }: { id: string }) {
         }
       }
       if (staffTarget) {
-        const was = classTeachers.filter((x) => x.user_id === id).map((x) => x.class_id);
-        const add = cls.filter((c) => !was.includes(c)), rm = was.filter((c) => !cls.includes(c));
-        if (add.length) {
-          const { error } = await supabase.from("class_teachers").insert(add.map((c) => ({ class_id: c, user_id: id })));
-          if (error) throw error;
-        }
-        if (rm.length) {
-          const { error } = await supabase.from("class_teachers").delete().eq("user_id", id).in("class_id", rm);
-          if (error) throw error;
-        }
+        await saveClasses();
       } else {
         const add = links.filter((s) => !linkedNow.includes(s)), rm = linkedNow.filter((s) => !links.includes(s));
         if (add.length) {
@@ -493,21 +556,7 @@ export function MemberEdit({ id }: { id: string }) {
               </div>
               {!canToggleAdmin && <span className="sub">منح صلاحية المشرف للمالك فقط.</span>}
             </section>
-            <section className="form">
-              <div className="sub">التدريس</div>
-              <b>الحلقات التي يدرّسها</b>
-              <span className="sub">المعلم يرى طلاب هذه الحلقات فقط، ويسجّل واجباتهم ويسمّع لهم.{admin ? " المشرف يرى كل الحلقات على أي حال." : ""}</span>
-              <div className="multi">
-                {classes.map((c) => (
-                  <label key={c.id}>
-                    <input type="checkbox" checked={cls.includes(c.id)} onChange={(e) => setCls(e.target.checked ? [...cls, c.id] : cls.filter((x) => x !== c.id))} />
-                    {c.name}
-                    <span className="sub" style={{ marginInlineStart: "auto" }}>{ar(students.filter((s) => s.class_id === c.id && s.active).length)} طالب</span>
-                  </label>
-                ))}
-                {!classes.length && <span className="sub">لا توجد فصول بعد.</span>}
-              </div>
-            </section>
+            {classPicker}
           </>
         ) : (
           <section className="form">

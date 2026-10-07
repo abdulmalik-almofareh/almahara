@@ -9,7 +9,7 @@ import { IconBook, IconHome, IconLogout, IconMenu, IconSchool, IconSettings, Ico
 type Item = { v: string; label: string; icon: React.ReactNode };
 
 export function Sidebar({ view, setView, schools, onSwitch }: { view: string; setView: (v: string) => void; schools: School[]; onSwitch: (id: string) => void }) {
-  const { school, role, staff, manager, me, schoolRow } = useApp();
+  const { school, role, staff, manager, me, schoolRow, myClassIds } = useApp();
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -29,7 +29,11 @@ export function Sidebar({ view, setView, schools, onSwitch }: { view: string; se
   }
 
   const main: Item[] = staff
-    ? [{ v: "board", label: "لوحة التحكم", icon: <IconHome /> }]
+    ? [
+        { v: "board", label: "لوحة التحكم", icon: <IconHome /> },
+        // المالك والمشرف: «حلقتي» تعرض الحلقات المسندة لهم فقط
+        ...(manager ? [{ v: "mine", label: myClassIds.length > 1 ? "حلقاتي" : "حلقتي", icon: <IconStudy /> }] : []),
+      ]
     : [{ v: "kids", label: role === "student" ? "واجباتي" : "أبنائي", icon: <IconStudy /> }];
   const admin: Item[] = staff
     ? [

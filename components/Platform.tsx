@@ -23,7 +23,7 @@ import { AssignmentModal } from "./AssignmentModal";
 import { MushafView } from "./Mushaf";
 import { GeneralSettings, MemberEdit, ProfileSettings, SettingsHub, TagsSettings, TypesSettings } from "./Settings";
 
-type View = "board" | "students" | "classes" | "members" | "settings" | "kids" | "s-profile" | "s-general" | "s-types" | "s-tags";
+type View = "board" | "mine" | "students" | "classes" | "members" | "settings" | "kids" | "s-profile" | "s-general" | "s-types" | "s-tags";
 
 export default function Platform({ school, schools, me }: { school: School; schools: School[]; me: Me }) {
   const supabase = useMemo(() => createClient(), []);
@@ -161,7 +161,9 @@ export default function Platform({ school, schools, me }: { school: School; scho
           {!ready ? (
             <div className="empty"><p>جارٍ تحميل المنصة…</p></div>
           ) : view === "board" ? (
-            <Board mergeAsg={mergeAsg} />
+            <Board key="board" mergeAsg={mergeAsg} />
+          ) : view === "mine" ? (
+            <Board key={"mine" + ctx.myClassIds.join()} mine mergeAsg={mergeAsg} />
           ) : view === "students" ? (
             <StudentsView />
           ) : view === "classes" ? (
@@ -214,10 +216,11 @@ function DrawerHost({ drawers }: { drawers: Drawer[] }) {
 }
 
 /* ---------------- board ---------------- */
-function Board({ mergeAsg }: { mergeAsg: (rows: Assignment[]) => void }) {
-  const { supabase, school, students, classes: allClasses, asg, open, manager, className, fail, myClassIds } = useApp2();
-  const classes = manager ? allClasses : allClasses.filter((c) => myClassIds.includes(c.id));
-  const [classId, setClassId] = useState("all");
+function Board({ mergeAsg, mine = false }: { mergeAsg: (rows: Assignment[]) => void; mine?: boolean }) {
+  const { supabase, school, students, classes: allClasses, asg, open, manager, className, fail, myClassIds, go } = useApp2();
+  const classes = manager && !mine ? allClasses : allClasses.filter((c) => myClassIds.includes(c.id));
+  // في «حلقتي» لا يوجد تبويب «الكل»؛ تُفتح أول حلقة مباشرة
+  const [classId, setClassId] = useState(mine ? classes[0]?.id ?? "none" : "all");
   const [span, setSpan] = useState(7);
   const [anchor, setAnchor] = useState(today());
   const [search, setSearch] = useState("");
@@ -258,7 +261,7 @@ function Board({ mergeAsg }: { mergeAsg: (rows: Assignment[]) => void }) {
     <div className="board">
       <div className="board-top">
         <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={classId === "all"} onClick={() => setClassId("all")}>الكل</button>
+          {!mine && <button role="tab" aria-selected={classId === "all"} onClick={() => setClassId("all")}>الكل</button>}
           {classes.map((c) => (
             <button key={c.id} role="tab" aria-selected={classId === c.id} onClick={() => setClassId(c.id)}>{c.name}</button>
           ))}
@@ -317,10 +320,16 @@ function Board({ mergeAsg }: { mergeAsg: (rows: Assignment[]) => void }) {
             {!list.length && (
               <tr>
                 <td colSpan={span + 1} className="grid-empty">
-                  {!classes.length
+                  {mine && !classes.length ? (
+                    <>
+                      أنت لا تدرّس أي حلقة.
+                      <div className="sub" style={{ marginTop: 6 }}>لإضافة حلقتك: الأعضاء ← اضغط على اسمك ← «الحلقات التي أدرّسها».</div>
+                      <div style={{ marginTop: 10 }}><button className="btn" onClick={() => go("members")}>فتح صفحة الأعضاء</button></div>
+                    </>
+                  ) : !classes.length
                     ? manager ? "ابدأ بإنشاء أول فصل من صفحة الفصول، ثم أضف الطلاب." : "لم تُسند لأي حلقة بعد. اطلب من المشرف إسنادك لحلقتك."
                     : search ? "لا يوجد طالب بهذا الاسم." : "لا يوجد طلاب في هذا الفصل بعد."}
-                  {manager && classes.length > 0 && !search && <div style={{ marginTop: 10 }}><button className="btn primary" onClick={() => open({ kind: "student-form" })}>إضافة طالب</button></div>}
+                  {manager && !mine && classes.length > 0 && !search && <div style={{ marginTop: 10 }}><button className="btn primary" onClick={() => open({ kind: "student-form" })}>إضافة طالب</button></div>}
                 </td>
               </tr>
             )}
