@@ -66,6 +66,7 @@ export default function InvitePage() {
           <>
             <h1>الدعوة غير موجودة</h1>
             <p className="sub" style={{ textAlign: "center" }}>تأكد من الرابط، أو اطلب من المشرف إرسال دعوة جديدة.</p>
+            <a className="btn" href="/">الصفحة الرئيسية</a>
           </>
         ) : (
           <>
@@ -82,10 +83,22 @@ export default function InvitePage() {
                 مرسلة إلى: <b dir="ltr">{inv.email}</b>
               </div>
             </div>
-            {inv.status !== "pending" ? (
-              <p className="err">{inv.status === "accepted" ? "استُخدمت هذه الدعوة من قبل." : "أُلغيت هذه الدعوة."}</p>
+            {inv.status === "accepted" ? (
+              <>
+                <div className="okmsg">{userEmail === inv.email.toLowerCase() ? "أنت عضو في هذه المدرسة بالفعل." : "قُبلت هذه الدعوة من قبل. سجّل الدخول بالبريد المدعو للوصول إلى المدرسة."}</div>
+                <a className="btn primary" href="/">{userEmail ? "الدخول إلى المنصة" : "تسجيل الدخول"}</a>
+                {userEmail && userEmail !== inv.email.toLowerCase() && <button className="btn" onClick={switchAccount}>الدخول بحساب آخر</button>}
+              </>
+            ) : inv.status !== "pending" ? (
+              <>
+                <p className="err">أُلغيت هذه الدعوة. اطلب من المشرف دعوة جديدة.</p>
+                <a className="btn" href="/">الصفحة الرئيسية</a>
+              </>
             ) : inv.expired ? (
-              <p className="err">انتهت صلاحية الدعوة. اطلب من المشرف دعوة جديدة.</p>
+              <>
+                <p className="err">انتهت صلاحية الدعوة. اطلب من المشرف دعوة جديدة.</p>
+                <a className="btn" href="/">الصفحة الرئيسية</a>
+              </>
             ) : !userEmail ? (
               <>
                 <a className="btn primary" href={"/login?next=" + encodeURIComponent("/invite/" + token)}>
