@@ -5,21 +5,23 @@ import { useApp, type Drawer } from "./AppContext";
 import { WordView } from "./Assignment";
 import { IconLeft, IconLeft2, IconMenu, IconRight, IconRight2, IconX } from "./icons";
 import { countMarks, fmtMark, KINDS, parseMark, TYPES, type Assignment, type Kind } from "@/lib/model";
-import { ar, clusters, isLetter, juzOf, juzStart, pageEnd, pageOf, pageStart, Q, saOf, surahName, surahStart, words } from "@/lib/quran";
+import { ar, clusters, isLetter, juzOf, juzStart, pageOf, Q, saOf, surahName, surahStart, words } from "@/lib/quran";
+import { loadPage, prefetch, type QPage } from "@/lib/qcf";
 
 type MushafD = Extract<Drawer, { kind: "mushaf" }>;
 type Mode = "read" | "mark" | "reflect";
 type Pop = { k: string; top: number; left: number };
 
 const PREFS = "mushaf-prefs";
-function loadPrefs(): { spread: 1 | 2; scale: number } {
+function loadPrefs(): { spread: 1 | 2 | null; scale: number } {
   try {
     const p = JSON.parse(localStorage.getItem(PREFS) || "{}");
-    return { spread: p.spread === 1 ? 1 : 2, scale: typeof p.scale === "number" ? p.scale : 100 };
+    return { spread: p.spread === 1 || p.spread === 2 ? p.spread : null, scale: typeof p.scale === "number" ? p.scale : 100 };
   } catch {
-    return { spread: 2, scale: 100 };
+    return { spread: null, scale: 100 };
   }
 }
+const RATIO = 0.64; // عرض صفحة المصحف ÷ ارتفاعها
 
 export function MushafView({ d }: { d: MushafD }) {
   const { supabase, asg, students, staff, back, replaceTop, upsertAsg, fail } = useApp();
@@ -28,6 +30,10 @@ export function MushafView({ d }: { d: MushafD }) {
   const [mode, setMode] = useState<Mode>(d.mode === "mark" && staff ? "mark" : d.mode === "reflect" ? "reflect" : "read");
   const [spread, setSpread] = useState<1 | 2>(2);
   const [scale, setScale] = useState(100);
+  const [prefsReady, setPrefsReady] = useState(false);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const touch = useRef<{ x: number; y: number } | null>(null);
   const [page, setPage] = useState(() => d.page ?? (a?.from_ayah ? pageOf(a.from_ayah) : 1));
   const [panel, setPanel] = useState(false);
   const [navTab, setNavTab] = useState<"surah" | "juz" | "page">("surah");
@@ -41,13 +47,23 @@ export function MushafView({ d }: { d: MushafD }) {
   useEffect(() => {
     const p = loadPrefs();
     setScale(p.scale);
-    setSpread(window.innerWidth < 900 ? 1 : p.spread);
+    // يحدده المستخدم من إعدادات العرض؛ وإن لم يحدد: صفحة في الشاشات الضيقة وصفحتان في الواسعة
+    setSpread(p.spread ?? (window.innerWidth < 900 ? 1 : 2));
+    setPrefsReady(true);
   }, []);
   useEffect(() => {
+    if (!prefsReady) return;
     try {
       localStorage.setItem(PREFS, JSON.stringify({ spread, scale }));
     } catch {}
-  }, [spread, scale]);
+  }, [spread, scale, prefsReady]);
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const flush = useCallback(async () => {
     if (!timer.current || !a) return;
@@ -82,6 +98,9 @@ export function MushafView({ d }: { d: MushafD }) {
     return [right, right + 1].filter((p) => p >= 1 && p <= 604);
   }, [page, spread]);
   const step = spread;
+  useEffect(() => {
+    prefetch([...shown, ...shown.map((p) => p + step), ...shown.map((p) => p - step)]);
+  }, [shown, step]);
   const go = useCallback((p: number) => {
     setPop(null);
     setPage(Math.min(604, Math.max(1, p)));
@@ -109,9 +128,31 @@ export function MushafView({ d }: { d: MushafD }) {
   const idx = siblings.findIndex((x) => x.id === a.id);
   const c = countMarks({ type: a.type, marks, counts: a.counts });
 
+  // مقاس الصفحة: تملأ ارتفاع الشاشة دون تمرير (أو عرضها إن كان أضيق)، ثم يُطبَّق حجم العرض
+  const narrow = box.w < 700;
+  const pad = narrow ? 8 : 16; // حشوة منطقة العرض
+  const arrows = narrow ? 0 : 2 * (46 + 8);
+  const fit = Math.max(200, Math.min((box.w - pad - arrows - 4 * shown.length) / shown.length, (box.h - pad - 4) * RATIO));
+  const pageW = Math.floor(fit * (scale / 100));
+
+  function onTouchStart(e: React.TouchEvent) {
+    const t = e.touches[0];
+    touch.current = { x: t.clientX, y: t.clientY };
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    const st = touch.current;
+    touch.current = null;
+    if (!st || scale > 100) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - st.x, dy = t.clientY - st.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    // المصحف يُقلَّب من اليسار: السحب لليمين يفتح الصفحة التالية
+    go(dx > 0 ? page + step : page - step);
+  }
+
   function onText(e: React.MouseEvent) {
     if (mode !== "mark") return;
-    const el = (e.target as HTMLElement).closest(".w") as HTMLElement | null;
+    const el = (e.target as HTMLElement).closest("[data-w]") as HTMLElement | null;
     const k = el?.dataset.w;
     if (!el || !k) return;
     const ayah = Number(k.split(":")[0]);
@@ -144,29 +185,18 @@ export function MushafView({ d }: { d: MushafD }) {
         <button className="icon-btn" aria-label="الإعدادات" aria-expanded={panel} onClick={() => setPanel(!panel)}><IconMenu /></button>
         <div className="mf-title">
           <button className="icon-btn" disabled={idx <= 0} aria-label="الواجب السابق" onClick={() => replaceTop({ kind: "mushaf", id: siblings[idx - 1].id, mode })}><IconRight2 /></button>
-          <span><b style={{ color: `var(--${a.type})` }}>{TYPES[a.type]}</b> · {s?.name} · {a.label}</span>
+          <span><b style={{ color: `var(--${a.type})` }}>{TYPES[a.type]}</b> · {s?.name} · {a.label}{mode === "mark" && saving ? <small className="sub"> · {saving}</small> : null}</span>
           <button className="icon-btn" disabled={idx < 0 || idx >= siblings.length - 1} aria-label="الواجب التالي" onClick={() => replaceTop({ kind: "mushaf", id: siblings[idx + 1].id, mode })}><IconLeft2 /></button>
         </div>
         <button className="icon-btn" aria-label="إغلاق" onClick={async () => { await flush(); back(); }}><IconX /></button>
       </header>
 
-      {mode === "mark" && (
-        <div className="mf-tools">
-          {(Object.entries(KINDS) as [Kind, string][]).map(([k, l]) => (
-            <button key={k} type="button" className="tool" style={{ ["--kc" as string]: `var(--${k})` }} aria-pressed={tool === k} onClick={() => setTool(k)}>
-              <i />{l} <span className="n">{ar(c[k])}</span>
-            </button>
-          ))}
-          <span className="saving">{saving}</span>
+      <div className="mf-stage" ref={stageRef} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        {!narrow && <button className="mf-arrow" aria-label="الصفحات السابقة" disabled={shown[0] <= 1} onClick={() => go(page - step)}><IconRight size={26} /></button>}
+        <div className={"mf-spread n" + shown.length + (scale > 100 ? " zoomed" : "")} onClick={onText} style={{ ["--pw" as string]: pageW + "px" }}>
+          {box.w > 0 && shown.map((p) => <QcfPage key={p} p={p} marks={marks} from={from} to={to} sel={pop?.k} hideMarks={mode === "reflect"} />)}
         </div>
-      )}
-
-      <div className="mf-stage">
-        <button className="mf-arrow" aria-label="الصفحات السابقة" disabled={shown[0] <= 1} onClick={() => go(page - step)}><IconRight size={26} /></button>
-        <div className={"mf-spread n" + shown.length} onClick={onText}>
-          {shown.map((p) => <Page key={p} p={p} marks={marks} inRange={inRange} sel={pop?.k} hideMarks={mode === "reflect"} />)}
-        </div>
-        <button className="mf-arrow" aria-label="الصفحات التالية" disabled={shown[shown.length - 1] >= 604} onClick={() => go(page + step)}><IconLeft size={26} /></button>
+        {!narrow && <button className="mf-arrow" aria-label="الصفحات التالية" disabled={shown[shown.length - 1] >= 604} onClick={() => go(page + step)}><IconLeft size={26} /></button>}
       </div>
 
       {panel && (
@@ -183,6 +213,27 @@ export function MushafView({ d }: { d: MushafD }) {
               <button className="chip" onClick={() => go(pageOf(from))}>البداية: {surahName(saOf(from)[0])} {ar(saOf(from)[1])} · ص {ar(pageOf(from))}</button>
               <button className="chip" onClick={() => go(pageOf(to))}>النهاية: {surahName(saOf(to)[0])} {ar(saOf(to)[1])} · ص {ar(pageOf(to))}</button>
             </div>
+            <div className="mf-opt">
+              <span className="sub">الوضع</span>
+              <div className="chips">
+                <button className="chip" aria-pressed={mode === "read"} onClick={() => { setMode("read"); setPop(null); }}>قراءة</button>
+                {staff && <button className="chip" aria-pressed={mode === "mark"} onClick={() => setMode("mark")}>تحديد الأخطاء</button>}
+                <button className="chip" aria-pressed={mode === "reflect"} onClick={() => { setMode("reflect"); setPop(null); }}>تدبر</button>
+              </div>
+              <span className="sub">{mode === "mark" ? "اضغط على كلمة داخل الورد لتسجيل خطأ." : mode === "reflect" ? "يُخفي علامات الأخطاء للقراءة الهادئة." : "عرض الورد مع علامات الأخطاء."}</span>
+            </div>
+            {mode === "mark" && (
+              <div className="mf-opt">
+                <span className="sub">نوع العلامة عند الضغط على كلمة</span>
+                <div className="chips">
+                  {(Object.entries(KINDS) as [Kind, string][]).map(([k, l]) => (
+                    <button key={k} type="button" className="tool" style={{ ["--kc" as string]: `var(--${k})` }} aria-pressed={tool === k} onClick={() => setTool(k)}>
+                      <i />{l} <span className="n">{ar(c[k])}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="tabs" role="tablist" style={{ margin: 0 }}>
               {([["surah", "سورة"], ["juz", "جزء"], ["page", "صفحة"]] as const).map(([k, l]) => (
                 <button key={k} role="tab" aria-selected={navTab === k} onClick={() => setNavTab(k)}>{l}</button>
@@ -216,7 +267,7 @@ export function MushafView({ d }: { d: MushafD }) {
             </div>
             <div className="mf-opt">
               <span className="sub">المصحف</span>
-              <div className="chips"><span className="chip" aria-pressed="true">مصحف المدينة · حفص</span></div>
+              <div className="chips"><span className="chip" aria-pressed="true">مصحف المدينة ١٤٤١ · حفص</span></div>
             </div>
             <div className="mf-opt">
               <span className="sub">عرض الصفحات</span>
@@ -226,21 +277,14 @@ export function MushafView({ d }: { d: MushafD }) {
               </div>
             </div>
             <div className="mf-opt">
-              <span className="sub">حجم النص</span>
+              <span className="sub">حجم الصفحة</span>
               <div className="row">
-                <button className="btn sm" onClick={() => setScale(Math.max(70, scale - 10))} aria-label="تصغير">−</button>
+                <button className="btn sm" onClick={() => setScale(Math.max(60, scale - 10))} aria-label="تصغير">−</button>
                 <span className="num" style={{ minWidth: 50, textAlign: "center" }}>{ar(scale)}٪</span>
-                <button className="btn sm" onClick={() => setScale(Math.min(160, scale + 10))} aria-label="تكبير">+</button>
+                <button className="btn sm" onClick={() => setScale(Math.min(200, scale + 10))} aria-label="تكبير">+</button>
+                {scale !== 100 && <button className="btn sm ghost" onClick={() => setScale(100)}>ملء الشاشة</button>}
               </div>
-            </div>
-            <div className="mf-opt">
-              <span className="sub">الوضع</span>
-              <div className="chips">
-                <button className="chip" aria-pressed={mode === "read"} onClick={() => { setMode("read"); setPop(null); }}>قراءة</button>
-                {staff && <button className="chip" aria-pressed={mode === "mark"} onClick={() => setMode("mark")}>تحديد الأخطاء</button>}
-                <button className="chip" aria-pressed={mode === "reflect"} onClick={() => { setMode("reflect"); setPop(null); }}>تدبر</button>
-              </div>
-              <span className="sub">{mode === "mark" ? "اضغط على كلمة داخل الورد لتسجيل خطأ." : mode === "reflect" ? "يُخفي علامات الأخطاء للقراءة الهادئة." : "عرض الورد مع علامات الأخطاء."}</span>
+              <span className="sub">١٠٠٪ تعني أن الصفحة تملأ الشاشة بلا تمرير.</span>
             </div>
           </div>
         </>
@@ -291,47 +335,75 @@ export function MushafView({ d }: { d: MushafD }) {
   );
 }
 
-function Page({ p, marks, inRange, sel, hideMarks }: { p: number; marks: Record<string, string>; inRange: (id: number) => boolean; sel?: string; hideMarks: boolean }) {
-  const start = pageStart(p), end = pageEnd(p);
-  const [sn] = saOf(start);
-  const blocks: { sura?: number; ayahs: number[] }[] = [];
-  for (let id = start; id <= end; id++) {
-    const [s2, an] = saOf(id);
-    if (an === 1) blocks.push({ sura: s2, ayahs: [] });
-    else if (!blocks.length) blocks.push({ ayahs: [] });
-    blocks[blocks.length - 1].ayahs.push(id);
-  }
+function QcfPage({ p, marks, from, to, sel, hideMarks }: { p: number; marks: Record<string, string>; from: number; to: number; sel?: string; hideMarks: boolean }) {
+  const [pg, setPg] = useState<QPage | null>(null);
+  const [err, setErr] = useState(false);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setErr(false);
+    loadPage(p).then((x) => live && setPg(x), () => live && setErr(true));
+    return () => { live = false; };
+  }, [p, retry]);
+
+  const inR = (id: number) => id >= from && id <= to;
+  let firstAyah = 0;
+  if (pg) for (const l of pg.lines) if (l.kind === "text") { firstAyah = l.words.find((w) => w.ayah)?.ayah ?? 0; if (firstAyah) break; }
+  const sn = firstAyah ? saOf(firstAyah)[0] : 0;
+
   return (
-    <div className="mf-page">
-      <div className="pg-h"><span>{surahName(sn)}</span><span>جزء {ar(juzOf(start))}</span></div>
-      {blocks.map((b, bi) => (
-        <div key={bi}>
-          {b.sura && <div className="sura-h">سورة {surahName(b.sura)}</div>}
-          {b.sura && b.sura !== 1 && b.sura !== 9 && <div className="basmala">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</div>}
-          <div className="qt">
-            {b.ayahs.map((id) => {
-              const [, an] = saOf(id);
-              const ws = words(id);
-              const out = !inRange(id);
+    <div className="qp">
+      <div className="qp-in">
+        <div className="qp-h"><span>{sn ? surahName(sn) : ""}</span><span>{firstAyah ? "جزء " + ar(juzOf(firstAyah)) : ""}</span></div>
+        {!pg ? (
+          <div className="qp-msg">
+            {err ? (<>تعذّر تحميل الصفحة. تحقق من الاتصال.<button className="btn sm" onClick={() => setRetry(retry + 1)}>إعادة المحاولة</button></>) : "جارٍ تحميل الصفحة…"}
+          </div>
+        ) : (
+          <div className={"qp-lines" + (p <= 2 ? " opening" : "")}>
+            {pg.lines.map((l, li) => {
+              if (l.kind === "header") {
+                const out = !inR(surahStart(l.sura));
+                return <div key={li} className={"ql qh" + (out ? " out" : "")}><span style={{ fontFamily: l.font }}>{l.ch}</span></div>;
+              }
+              if (l.kind === "basmala") {
+                const next = pg.lines.slice(li + 1).find((x) => x.kind === "text");
+                const nid = next && next.kind === "text" ? next.words[0]?.ayah ?? 0 : 0;
+                return <div key={li} className={"ql qbs" + (nid && !inR(nid) ? " out" : "")}><span style={{ fontFamily: l.font }}>{l.ch}</span></div>;
+              }
               return (
-                <span key={id} className={out ? "out" : "in"}>
-                  {ws.map((w, i) =>
-                    isLetter.test(w) ? (
-                      <span key={i}>
-                        <WordView id={id} i={i} val={hideMarks ? undefined : marks[`${id}:${i}`]} selected={sel === `${id}:${i}`} />{" "}
+                <div key={li} className="ql" style={{ fontFamily: pg.font }}>
+                  {l.words.map((w, wi) => {
+                    const out = !inR(w.ayah);
+                    // قوس البداية قبل علامة الربع إن وُجدت، وإلا قبل أول كلمة
+                    const prevQuarter = wi > 0 && l.words[wi - 1].kind === "quarter" && l.words[wi - 1].ayah === from;
+                    const startB = w.ayah === from && ((w.kind === "quarter") || (w.kind === "word" && w.i === 0 && !prevQuarter));
+                    const endB = w.kind === "end" && w.ayah === to;
+                    let node: React.ReactNode;
+                    if (w.kind === "word") {
+                      const k = `${w.ayah}:${w.i}`;
+                      const val = hideMarks ? undefined : marks[k];
+                      const r = val ? parseMark(val) : null;
+                      node = (
+                        <span className={"qw" + (out ? " out" : " in") + (sel === k ? " sel" : "")} data-w={out ? undefined : k} data-m={r?.k} data-part={r && r.letters.length ? "1" : undefined}>{w.ch}</span>
+                      );
+                    } else node = <span className={"qm" + (out ? " out" : "")}>{w.ch}</span>;
+                    if (!startB && !endB) return <span key={wi} className="qwrap">{node}</span>;
+                    return (
+                      <span key={wi} className="qwrap">
+                        {startB && <i className="qb s" aria-label="بداية الواجب" />}
+                        {node}
+                        {endB && <i className="qb e" aria-label="نهاية الواجب" />}
                       </span>
-                    ) : (
-                      <span key={i} className="mk">{w} </span>
-                    ),
-                  )}
-                  <span className="an">﴿{ar(an)}﴾</span>{" "}
-                </span>
+                    );
+                  })}
+                </div>
               );
             })}
           </div>
-        </div>
-      ))}
-      <div className="pg-f num">{ar(p)}</div>
+        )}
+        <div className="qp-f num">{ar(p)}</div>
+      </div>
     </div>
   );
 }
