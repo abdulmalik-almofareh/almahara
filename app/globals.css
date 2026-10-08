@@ -420,7 +420,7 @@ table.grid{table-layout:fixed;width:100%;min-width:calc(180px + var(--days,7) * 
 .ql{display:flex;justify-content:space-between;align-items:center;direction:rtl;height:calc((var(--ph) * .87) / 15);font-size:calc(var(--pw) * var(--qk,.0512));line-height:1;white-space:nowrap}
 .qp-lines.opening .ql{justify-content:center}
 .ql.qh{justify-content:center;font-size:calc(var(--pw) * .06);color:var(--gold);border:1px solid var(--page-line);border-radius:6px;background:color-mix(in srgb,var(--gold) 7%,var(--page));margin:2px 4%}
-.ql.qbs{justify-content:center}
+.ql.qbs{justify-content:center;gap:.18em}
 .qwrap{display:inline-flex;align-items:center}
 .qw,.qm{display:inline-block;border-radius:4px;padding:0;line-height:1.45}
 .qm{color:var(--gold)}
