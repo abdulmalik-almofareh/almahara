@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApp, type Drawer } from "./AppContext";
 import { WordView } from "./Assignment";
 import { IconLeft, IconLeft2, IconMenu, IconRight, IconRight2, IconX } from "./icons";
-import { countMarks, fmtMark, KINDS, parseMark, TYPES, type Assignment, type Kind } from "@/lib/model";
+import { countMarks, fmtMark, KINDS, parseMark, RULES, TYPES, type Assignment, type Kind } from "@/lib/model";
 import { ar, clusters, isLetter, juzOf, juzStart, pageOf, Q, saOf, surahName, surahStart, words } from "@/lib/quran";
 import { loadPage, prefetch, type QPage } from "@/lib/qcf";
 
@@ -163,7 +163,7 @@ export function MushafView({ d }: { d: MushafD }) {
     let left = r.left + r.width / 2 - w / 2;
     left = Math.max(12, Math.min(left, window.innerWidth - w - 12));
     let top = r.bottom + 8;
-    if (top + 330 > window.innerHeight) top = Math.max(12, r.top - 338);
+    if (top + 430 > window.innerHeight) top = Math.max(12, r.top - 438);
     setPop({ k, top, left });
   }
   function editMark(fn: (r: ReturnType<typeof parseMark>) => void) {
@@ -302,28 +302,52 @@ export function MushafView({ d }: { d: MushafD }) {
             <div className="pw"><WordView id={pa} i={pw} val={marks[pop.k]} isStatic /></div>
             <div className="kinds">
               {(Object.entries(KINDS) as [Kind, string][]).map(([k, l]) => (
-                <button key={k} type="button" className="tool" style={{ ["--kc" as string]: `var(--${k})` }} aria-pressed={popMark.k === k} onClick={() => editMark((r) => (r.k = k))}>
+                <button key={k} type="button" className="tool" style={{ ["--kc" as string]: `var(--${k})` }} aria-pressed={popMark.k === k} onClick={() => editMark((r) => {
+                  // التجويد يُحدَّد بالحكم، وبقية الأنواع بالحرف
+                  if (k === "t" && r.k !== "t") { r.letters = []; r.harakat = false; }
+                  if (k !== "t") r.rules = [];
+                  r.k = k;
+                })}>
                   <i />{l}
                 </button>
               ))}
             </div>
+            {popMark.k === "t" ? (
+              <>
+                <div className="hint">اختر حكم التجويد الذي وقع فيه الخطأ (يمكن أكثر من حكم)</div>
+                <div className="rules">
+                  {Object.entries(RULES).map(([id, l]) => (
+                    <button key={id} type="button" aria-pressed={popMark.rules.includes(id)} onClick={() => editMark((r) => {
+                      r.rules = r.rules.includes(id) ? r.rules.filter((x) => x !== id) : [...r.rules, id];
+                    })}>{l}</button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
             <div className="hint">حدّد الحرف الذي وقع فيه الخطأ، أو اترك الكلمة كاملة</div>
-            <div className="letters">
-              {clusters(words(pa)[pw] || "").map((ch, j) =>
-                isLetter.test(ch) ? (
-                  <button key={j} type="button" aria-pressed={popMark.letters.includes(j)} onClick={() => editMark((r) => {
-                    r.letters = r.letters.includes(j) ? r.letters.filter((x) => x !== j) : [...r.letters, j];
-                    if (!r.letters.length) r.harakat = false;
-                  })}>{ch}</button>
-                ) : null,
-              )}
-            </div>
-            <label className="row sub" style={{ gap: 6 }}>
-              <input type="checkbox" id="pkHarakat" checked={popMark.harakat} disabled={!popMark.letters.length} onChange={() => editMark((r) => (r.harakat = !r.harakat))} />
-              الخطأ في الحركات فقط
-            </label>
+              <div className="letters">
+                {clusters(words(pa)[pw] || "").map((ch, j) =>
+                  isLetter.test(ch) ? (
+                    <button key={j} type="button" aria-pressed={popMark.letters.includes(j)} onClick={() => editMark((r) => {
+                      r.letters = r.letters.includes(j) ? r.letters.filter((x) => x !== j) : [...r.letters, j];
+                      if (!r.letters.length) r.harakat = false;
+                    })}>{ch}</button>
+                  ) : null,
+                )}
+              </div>
+              <label className="row sub" style={{ gap: 6 }}>
+                <input type="checkbox" id="pkHarakat" checked={popMark.harakat} disabled={!popMark.letters.length} onChange={() => editMark((r) => (r.harakat = !r.harakat))} />
+                الخطأ في الحركات فقط
+              </label>
+              </>
+            )}
             <div className="row">
-              <button type="button" className="btn sm" disabled={!popMark.letters.length} onClick={() => editMark((r) => { r.letters = []; r.harakat = false; })}>الكلمة كاملة</button>
+              {popMark.k === "t" ? (
+                <button type="button" className="btn sm" disabled={!popMark.rules.length} onClick={() => editMark((r) => { r.rules = []; })}>بدون تحديد حكم</button>
+              ) : (
+                <button type="button" className="btn sm" disabled={!popMark.letters.length} onClick={() => editMark((r) => { r.letters = []; r.harakat = false; })}>الكلمة كاملة</button>
+              )}
               <button type="button" className="btn sm danger" onClick={() => { const k = pop.k; change((m) => { delete m[k]; return m; }); setPop(null); }}>إزالة العلامة</button>
               <span className="spacer" />
               <button type="button" className="btn sm primary" onClick={() => setPop(null)}>تم</button>
@@ -385,7 +409,7 @@ function QcfPage({ p, marks, from, to, sel, hideMarks }: { p: number; marks: Rec
                       const val = hideMarks ? undefined : marks[k];
                       const r = val ? parseMark(val) : null;
                       node = (
-                        <span className={"qw" + (out ? " out" : " in") + (sel === k ? " sel" : "")} data-w={out ? undefined : k} data-m={r?.k} data-part={r && r.letters.length ? "1" : undefined}>{w.ch}</span>
+                        <span className={"qw" + (out ? " out" : " in") + (sel === k ? " sel" : "")} data-w={out ? undefined : k} data-m={r?.k} data-part={r && (r.letters.length || r.rules.length) ? "1" : undefined}>{w.ch}</span>
                       );
                     } else node = <span className={"qm" + (out ? " out" : "")}>{w.ch}</span>;
                     if (!startB && !endB) return <span key={wi} className="qwrap">{node}</span>;
