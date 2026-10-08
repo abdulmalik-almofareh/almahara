@@ -72,24 +72,42 @@ export type Assignment = {
 export type Comment = { id: string; assignment_id: string; user_id: string; body: string; created_at: string };
 export type AsgEvent = { id: string; assignment_id: string; user_id: string | null; kind: string; detail: Record<string, unknown>; created_at: string };
 
-/* a mark value is "k" (whole word) or "k|l:0,2" (those letters) or "k|h:1" (harakat only on those letters) */
-export type Mark = { k: Kind; letters: number[]; harakat: boolean };
+/* a mark value is "k" (whole word) or "k|l:0,2" (those letters) or "k|h:1" (harakat only on those letters)
+   or, for tajweed, "t|r:ikhfa,ghunna" (the tajweed rules that were missed) */
+export const RULES: Record<string, string> = {
+  izhar: "الإظهار",
+  idgham: "الإدغام",
+  iqlab: "الإقلاب",
+  ikhfa: "الإخفاء",
+  ikhfa_sh: "الإخفاء الشفوي",
+  idgham_sh: "الإدغام الشفوي",
+  izhar_sh: "الإظهار الشفوي",
+  ghunna: "الغنة",
+  madd: "المدود",
+  tafkhim: "التفخيم",
+};
+export type Mark = { k: Kind; letters: number[]; harakat: boolean; rules: string[] };
 export const mKind = (v: string) => v.split("|")[0] as Kind;
 export function parseMark(v: string): Mark {
   const [k, d] = v.split("|");
-  const r: Mark = { k: k as Kind, letters: [], harakat: false };
+  const r: Mark = { k: k as Kind, letters: [], harakat: false, rules: [] };
   if (d) {
     const [g, idx] = d.split(":");
-    r.harakat = g === "h";
-    r.letters = idx ? idx.split(",").map(Number) : [];
+    if (g === "r") r.rules = idx ? idx.split(",").filter((x) => x in RULES) : [];
+    else {
+      r.harakat = g === "h";
+      r.letters = idx ? idx.split(",").map(Number) : [];
+    }
   }
   return r;
 }
 export function fmtMark(r: Mark) {
+  if (r.k === "t") return r.rules.length ? `t|r:${Object.keys(RULES).filter((x) => r.rules.includes(x)).join(",")}` : "t";
   return r.letters.length ? `${r.k}|${r.harakat ? "h" : "l"}:${[...r.letters].sort((a, b) => a - b).join(",")}` : r.k;
 }
 export function markDetail(v: string, w: string) {
   const r = parseMark(v);
+  if (r.rules.length) return "الحكم: " + r.rules.map((x) => RULES[x]).join("، ");
   if (!r.letters.length) return "";
   const cs = clusters(w);
   return (r.harakat ? "الحركات فقط: " : "حرف: ") + r.letters.map((i) => cs[i] || "").join(" ، ");
