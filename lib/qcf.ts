@@ -22,6 +22,7 @@ const MERGED: Record<string, number> = { "15:7": 0, "27:20": 3, "36:22": 0, "37:
 type RawWord = { char: string; font: string; text: string; type: string; verse_key?: string; position?: number | null; sura?: number };
 type RawPage = { page: number; font: string; lines: { line: number; words: RawWord[] }[] };
 
+const BASMALA = "\uFAD0\uFAD1\uFAD2\uFAD3";
 const pages = new Map<number, Promise<QPage>>();
 const fonts = new Map<string, Promise<void>>();
 
@@ -50,7 +51,8 @@ function convert(raw: RawPage): QPage {
   const lines: QLine[] = raw.lines.map((l) => {
     const first = l.words[0];
     if (first?.type === "surah_header") return { kind: "header", sura: first.sura ?? 0, ch: first.char, font: first.font };
-    if (first?.type === "bismillah") return { kind: "basmala", ch: l.words.map((w) => w.char).join(""), font: first.font };
+    // البسملة من خط العناوين QBSML (أربع كلمات منفصلة)؛ حرف البسملة في خط الصفحات يظهر مشوّهاً في بعض المتصفحات
+    if (first?.type === "bismillah") return { kind: "basmala", ch: BASMALA, font: "QCF4_QBSML" };
     return {
       kind: "text",
       words: l.words.map((w): QWord => {
