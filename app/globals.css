@@ -505,3 +505,7 @@ table.grid{table-layout:fixed;width:100%;min-width:calc(180px + var(--days,7) * 
   .panel-h .grow-m{flex:1 1 100%;order:5;width:auto!important;min-width:0}
 }
 @media (max-width:700px){.board-top .tabs button{padding:8px 10px}.main{padding-top:calc(58px + env(safe-area-inset-top,0px))}}
+.pop{max-height:calc(100vh - 24px);overflow:auto}
+.pop .rules{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.pop .rules button{border:1px solid var(--line);border-radius:20px;background:var(--surface-2);padding:6px 12px;font-size:14px;color:var(--ink)}
+.pop .rules button[aria-pressed="true"]{border-color:var(--t);background:color-mix(in srgb,var(--t) 18%,var(--surface));color:var(--t);font-weight:600}
