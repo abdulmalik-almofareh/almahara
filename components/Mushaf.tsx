@@ -369,7 +369,7 @@ function QcfPage({ p, marks, from, to, sel, hideMarks }: { p: number; marks: Rec
               if (l.kind === "basmala") {
                 const next = pg.lines.slice(li + 1).find((x) => x.kind === "text");
                 const nid = next && next.kind === "text" ? next.words[0]?.ayah ?? 0 : 0;
-                return <div key={li} className={"ql qbs" + (nid && !inR(nid) ? " out" : "")}><span style={{ fontFamily: l.font }}>{l.ch}</span></div>;
+                return <div key={li} className={"ql qbs" + (nid && !inR(nid) ? " out" : "")} style={{ fontFamily: l.font }}>{[...l.ch].map((c, i) => <span key={i}>{c}</span>)}</div>;
               }
               return (
                 <div key={li} className="ql" style={{ fontFamily: pg.font }}>
